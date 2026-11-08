@@ -2,7 +2,15 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { isDatabaseUp } from '../src/db/client.js';
-import { adminAccess, auditEvent, nikount, participant } from '../src/db/schema.js';
+import {
+  adminAccess,
+  auditEvent,
+  financialTransaction,
+  nikount,
+  participant,
+  transactionRevision,
+  transactionShare,
+} from '../src/db/schema.js';
 import { createTestDatabase, type TestDatabase } from './helpers.js';
 
 let testDb: TestDatabase;
@@ -160,6 +168,151 @@ describe('participants : garanties en base', () => {
         tokenHash: tokenHash(),
       }),
       /admin_access_participant_same_nikount_fk/,
+    );
+  });
+});
+
+describe('opérations : garanties en base', () => {
+  async function seed() {
+    const nikountId = randomUUID();
+    await testDb.db.insert(nikount).values(newNikount({ id: nikountId }));
+    const [alice, bob] = [randomUUID(), randomUUID()];
+    await testDb.db.insert(participant).values([
+      { id: alice, nikountId, name: 'Alice', sortOrder: 0 },
+      { id: bob, nikountId, name: 'Bob', sortOrder: 1 },
+    ]);
+    return { nikountId, alice, bob };
+  }
+
+  function txValues(nikountId: string, payerId: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id: randomUUID(),
+      nikountId,
+      type: 'EXPENSE' as const,
+      status: 'PENDING' as const,
+      amount: 1000,
+      description: 'Test',
+      occurredOn: '2026-09-28',
+      payerId,
+      distributionMode: 'EQUAL' as const,
+      createdByKind: 'PARTICIPANT' as const,
+      clientRequestId: randomUUID(),
+      ...overrides,
+    };
+  }
+
+  const share = (
+    nikountId: string,
+    transactionId: string,
+    participantId: string,
+    amount: number,
+  ) => ({
+    id: randomUUID(),
+    transactionId,
+    nikountId,
+    participantId,
+    inputValue: 1,
+    amount,
+  });
+
+  it('accepte une opération dont la somme des parts égale le montant', async () => {
+    const { nikountId, alice, bob } = await seed();
+    const tx = txValues(nikountId, alice);
+    await testDb.db.transaction(async (db) => {
+      await db.insert(financialTransaction).values(tx);
+      await db
+        .insert(transactionShare)
+        .values([share(nikountId, tx.id, alice, 500), share(nikountId, tx.id, bob, 500)]);
+    });
+  });
+
+  it('refuse, à la validation de la transaction SQL, des parts dont la somme diffère du montant', async () => {
+    const { nikountId, alice, bob } = await seed();
+    const tx = txValues(nikountId, alice);
+    await expectDatabaseError(
+      testDb.db.transaction(async (db) => {
+        await db.insert(financialTransaction).values(tx);
+        await db
+          .insert(transactionShare)
+          .values([share(nikountId, tx.id, alice, 500), share(nikountId, tx.id, bob, 499)]);
+      }),
+      /somme des parts \(999\) différente du montant \(1000\)/,
+    );
+  });
+
+  it('refuse une opération sans concerné', async () => {
+    const { nikountId, alice } = await seed();
+    await expectDatabaseError(
+      testDb.db.transaction(async (db) => {
+        await db.insert(financialTransaction).values(txValues(nikountId, alice));
+      }),
+      /sans concerné/,
+    );
+  });
+
+  it('refuse un remboursement vers le payeur lui-même', async () => {
+    const { nikountId, alice } = await seed();
+    const tx = txValues(nikountId, alice, { type: 'REIMBURSEMENT' });
+    await expectDatabaseError(
+      testDb.db.transaction(async (db) => {
+        await db.insert(financialTransaction).values(tx);
+        await db.insert(transactionShare).values([share(nikountId, tx.id, alice, 1000)]);
+      }),
+      /un seul bénéficiaire/,
+    );
+  });
+
+  it('refuse un statut sans ses traces (VALIDATED sans validateur)', async () => {
+    const { nikountId, alice } = await seed();
+    const tx = txValues(nikountId, alice, { status: 'VALIDATED', validatedAt: new Date() });
+    await expectDatabaseError(
+      testDb.db.transaction(async (db) => {
+        await db.insert(financialTransaction).values(tx);
+        await db.insert(transactionShare).values([share(nikountId, tx.id, alice, 1000)]);
+      }),
+      /transaction_status_consistency/,
+    );
+  });
+
+  it('refuse une part attribuée à un participant d’un autre nikount', async () => {
+    const a = await seed();
+    const b = await seed();
+    const tx = txValues(a.nikountId, a.alice);
+    await expectDatabaseError(
+      testDb.db.transaction(async (db) => {
+        await db.insert(financialTransaction).values(tx);
+        await db.insert(transactionShare).values([share(a.nikountId, tx.id, b.alice, 1000)]);
+      }),
+      /transaction_share_participant_same_nikount_fk/,
+    );
+  });
+
+  it('interdit de supprimer une opération ou de modifier une révision', async () => {
+    const { nikountId, alice } = await seed();
+    const tx = txValues(nikountId, alice);
+    await testDb.db.transaction(async (db) => {
+      await db.insert(financialTransaction).values(tx);
+      await db.insert(transactionShare).values([share(nikountId, tx.id, alice, 1000)]);
+      await db.insert(transactionRevision).values({
+        id: randomUUID(),
+        transactionId: tx.id,
+        nikountId,
+        revision: 1,
+        snapshot: {},
+        changedByKind: 'PARTICIPANT',
+      });
+    });
+
+    await expectDatabaseError(
+      testDb.db.delete(financialTransaction).where(eq(financialTransaction.id, tx.id)),
+      /ne se supprime pas/,
+    );
+    await expectDatabaseError(
+      testDb.db
+        .update(transactionRevision)
+        .set({ reason: 'x' })
+        .where(eq(transactionRevision.transactionId, tx.id)),
+      /ajout seul/,
     );
   });
 });

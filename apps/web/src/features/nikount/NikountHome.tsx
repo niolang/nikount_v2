@@ -1,45 +1,29 @@
-import { useState } from 'react';
-import { Link } from 'react-router';
-import type { MeResponse, ParticipantView } from '@nikount/contracts';
+import { Link, useLocation } from 'react-router';
+import type { MeResponse, ParticipantView, TransactionView } from '@nikount/contracts';
+import { isActionAllowed } from '@nikount/core';
 import { useParticipantLink } from '../../api/nikount';
 import { useParticipants } from '../../api/participants';
+import { useTransactions } from '../../api/transactions';
 import { Card, PageShell, ShareableLink, StateBadge } from '../../components/ui';
-import {
-  clearDeclaredIdentity,
-  getDeclaredIdentity,
-  setDeclaredIdentity,
-} from '../../lib/identity';
+import { transactionEmoji } from '../../lib/categories';
+import { formatShortDate } from '../../lib/dates';
+import { formatMoney } from '../../lib/format';
 import { nikountUrl } from '../../lib/links';
+import { useCurrentParticipant } from './useCurrentParticipant';
 
-/**
- * Identité de la personne sur cet appareil :
- * - admin : le participant lié à son lien admin (identité forte) ;
- * - participant : l'identité déclarée « Je suis… », si elle désigne un participant actif.
- */
-function useCurrentParticipant(token: string, me: MeResponse, participants: ParticipantView[]) {
-  const [declaredId, setDeclaredId] = useState(() => getDeclaredIdentity(token));
-  const active = participants.filter((p) => p.isActive);
-  const id = me.role === 'ADMIN' ? (me.admin?.participantId ?? null) : declaredId;
-  const current = active.find((p) => p.id === id) ?? null;
-
-  return {
-    current,
-    declare: (participantId: string) => {
-      setDeclaredIdentity(token, participantId);
-      setDeclaredId(participantId);
-    },
-    reset: () => {
-      clearDeclaredIdentity(token);
-      setDeclaredId(null);
-    },
-  };
-}
+/** Nombre d'opérations affichées sur l'accueil (l'historique complet arrive en Phase 6). */
+const RECENT_LIMIT = 10;
 
 export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
   const participants = useParticipants(token);
+  const transactions = useTransactions(token);
   const identity = useCurrentParticipant(token, me, participants.data ?? []);
   const isAdmin = me.role === 'ADMIN';
   const needsIdentity = !isAdmin && participants.isSuccess && identity.current === null;
+  const canAddExpense =
+    isActionAllowed('CREATE_EXPENSE', me.nikount.state) &&
+    (participants.data ?? []).some((p) => p.isActive);
+  const flash = (useLocation().state as { flash?: string } | null)?.flash;
 
   return (
     <PageShell>
@@ -76,15 +60,27 @@ export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
         <IdentityPicker participants={participants.data} onPick={identity.declare} />
       ) : (
         <>
-          <Card className="mt-6 text-center">
-            <p className="text-4xl" aria-hidden="true">
-              🧾
+          {flash ? (
+            <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+              {flash}
             </p>
-            <h2 className="mt-2 font-bold">Aucune dépense pour l’instant</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Les dépenses et les soldes arrivent dans les prochaines versions.
-            </p>
-          </Card>
+          ) : null}
+
+          {canAddExpense ? (
+            <Link
+              to="expenses/new"
+              className="mt-6 flex min-h-14 items-center justify-center rounded-2xl bg-brand-700 px-6 text-lg font-semibold text-white shadow-sm hover:bg-brand-800"
+            >
+              + Ajouter une dépense
+            </Link>
+          ) : null}
+
+          <RecentTransactions
+            transactions={transactions.data}
+            isError={transactions.isError}
+            participants={participants.data ?? []}
+            currency={me.nikount.currency}
+          />
 
           {participants.data ? (
             <ParticipantsCard
@@ -211,6 +207,55 @@ function InviteCard({ token, nikountName }: { token: string; nikountName: string
         <p className="text-sm text-red-600">Lien indisponible pour le moment.</p>
       ) : (
         <p className="text-sm text-slate-500">Chargement du lien…</p>
+      )}
+    </Card>
+  );
+}
+
+/** Dernières opérations (version simple ; l'historique complet arrive en Phase 6). */
+function RecentTransactions({
+  transactions,
+  isError,
+  participants,
+  currency,
+}: {
+  transactions: TransactionView[] | undefined;
+  isError: boolean;
+  participants: ParticipantView[];
+  currency: string;
+}) {
+  const names = new Map(participants.map((p) => [p.id, p.name]));
+  return (
+    <Card className="mt-4">
+      <h2 className="font-bold">Dernières opérations</h2>
+      {isError ? (
+        <p className="mt-2 text-sm text-red-600">Impossible de charger les opérations.</p>
+      ) : !transactions ? (
+        <p className="mt-2 text-sm text-slate-500">Chargement…</p>
+      ) : transactions.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-500">Aucune dépense pour l’instant.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-slate-100">
+          {transactions.slice(0, RECENT_LIMIT).map((t) => (
+            <li key={t.id} className="flex items-center gap-3 py-2.5">
+              <span className="text-2xl" aria-hidden="true">
+                {transactionEmoji(t.type, t.category)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{t.description}</p>
+                <p className="text-sm text-slate-500">
+                  {names.get(t.payerId) ?? '?'} · {formatShortDate(t.occurredOn)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="tabular font-semibold">{formatMoney(t.amount, currency)}</p>
+                {t.status === 'PENDING' ? (
+                  <p className="text-xs font-semibold text-amber-700">⏳ En attente</p>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );

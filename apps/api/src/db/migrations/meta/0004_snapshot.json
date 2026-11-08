@@ -1,0 +1,1211 @@
+{
+  "id": "dd9432fa-7126-4b2d-b81e-20d013c10a10",
+  "prevId": "f13d0a1a-9502-4356-88de-54802d0c226f",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.admin_access": {
+      "name": "admin_access",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nikount_id": {
+          "name": "nikount_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_id": {
+          "name": "participant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by_admin_id": {
+          "name": "created_by_admin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "admin_access_nikount_idx": {
+          "name": "admin_access_nikount_idx",
+          "columns": [
+            {
+              "expression": "nikount_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "admin_access_nikount_id_nikount_id_fk": {
+          "name": "admin_access_nikount_id_nikount_id_fk",
+          "tableFrom": "admin_access",
+          "tableTo": "nikount",
+          "columnsFrom": [
+            "nikount_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "admin_access_participant_same_nikount_fk": {
+          "name": "admin_access_participant_same_nikount_fk",
+          "tableFrom": "admin_access",
+          "tableTo": "participant",
+          "columnsFrom": [
+            "nikount_id",
+            "participant_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "admin_access_token_hash_unique": {
+          "name": "admin_access_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        },
+        "admin_access_nikount_id_id_unique": {
+          "name": "admin_access_nikount_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "nikount_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "admin_access_label_length": {
+          "name": "admin_access_label_length",
+          "value": "char_length(\"admin_access\".\"label\") between 1 and 40"
+        },
+        "admin_access_token_hash_length": {
+          "name": "admin_access_token_hash_length",
+          "value": "octet_length(\"admin_access\".\"token_hash\") = 32"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.audit_event": {
+      "name": "audit_event",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "audit_event_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "nikount_id": {
+          "name": "nikount_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "actor_kind": {
+          "name": "actor_kind",
+          "type": "actor_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_admin_id": {
+          "name": "actor_admin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_participant_id": {
+          "name": "actor_participant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data": {
+          "name": "data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "audit_event_nikount_occurred_idx": {
+          "name": "audit_event_nikount_occurred_idx",
+          "columns": [
+            {
+              "expression": "nikount_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "audit_event_nikount_id_nikount_id_fk": {
+          "name": "audit_event_nikount_id_nikount_id_fk",
+          "tableFrom": "audit_event",
+          "tableTo": "nikount",
+          "columnsFrom": [
+            "nikount_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "audit_event_actor_admin_id_admin_access_id_fk": {
+          "name": "audit_event_actor_admin_id_admin_access_id_fk",
+          "tableFrom": "audit_event",
+          "tableTo": "admin_access",
+          "columnsFrom": [
+            "actor_admin_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "audit_event_actor_consistency": {
+          "name": "audit_event_actor_consistency",
+          "value": "(\"audit_event\".\"actor_kind\" = 'ADMIN') = (\"audit_event\".\"actor_admin_id\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.transaction": {
+      "name": "transaction",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nikount_id": {
+          "name": "nikount_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "transaction_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "transaction_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "transaction_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_on": {
+          "name": "occurred_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payer_id": {
+          "name": "payer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "distribution_mode": {
+          "name": "distribution_mode",
+          "type": "distribution_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by_kind": {
+          "name": "created_by_kind",
+          "type": "actor_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by_admin_id": {
+          "name": "created_by_admin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "declared_by_participant_id": {
+          "name": "declared_by_participant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_request_id": {
+          "name": "client_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validated_at": {
+          "name": "validated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validated_by_admin_id": {
+          "name": "validated_by_admin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejected_at": {
+          "name": "rejected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejected_by_admin_id": {
+          "name": "rejected_by_admin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejection_reason": {
+          "name": "rejection_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_by_admin_id": {
+          "name": "cancelled_by_admin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancellation_reason": {
+          "name": "cancellation_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "transaction_nikount_status_idx": {
+          "name": "transaction_nikount_status_idx",
+          "columns": [
+            {
+              "expression": "nikount_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transaction_nikount_occurred_idx": {
+          "name": "transaction_nikount_occurred_idx",
+          "columns": [
+            {
+              "expression": "nikount_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_on",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transaction_nikount_id_nikount_id_fk": {
+          "name": "transaction_nikount_id_nikount_id_fk",
+          "tableFrom": "transaction",
+          "tableTo": "nikount",
+          "columnsFrom": [
+            "nikount_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_payer_same_nikount_fk": {
+          "name": "transaction_payer_same_nikount_fk",
+          "tableFrom": "transaction",
+          "tableTo": "participant",
+          "columnsFrom": [
+            "nikount_id",
+            "payer_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_declared_by_same_nikount_fk": {
+          "name": "transaction_declared_by_same_nikount_fk",
+          "tableFrom": "transaction",
+          "tableTo": "participant",
+          "columnsFrom": [
+            "nikount_id",
+            "declared_by_participant_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_created_by_same_nikount_fk": {
+          "name": "transaction_created_by_same_nikount_fk",
+          "tableFrom": "transaction",
+          "tableTo": "admin_access",
+          "columnsFrom": [
+            "nikount_id",
+            "created_by_admin_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_validated_by_same_nikount_fk": {
+          "name": "transaction_validated_by_same_nikount_fk",
+          "tableFrom": "transaction",
+          "tableTo": "admin_access",
+          "columnsFrom": [
+            "nikount_id",
+            "validated_by_admin_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_rejected_by_same_nikount_fk": {
+          "name": "transaction_rejected_by_same_nikount_fk",
+          "tableFrom": "transaction",
+          "tableTo": "admin_access",
+          "columnsFrom": [
+            "nikount_id",
+            "rejected_by_admin_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_cancelled_by_same_nikount_fk": {
+          "name": "transaction_cancelled_by_same_nikount_fk",
+          "tableFrom": "transaction",
+          "tableTo": "admin_access",
+          "columnsFrom": [
+            "nikount_id",
+            "cancelled_by_admin_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "transaction_nikount_id_id_unique": {
+          "name": "transaction_nikount_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "nikount_id",
+            "id"
+          ]
+        },
+        "transaction_client_request_unique": {
+          "name": "transaction_client_request_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "nikount_id",
+            "client_request_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "transaction_amount_range": {
+          "name": "transaction_amount_range",
+          "value": "\"transaction\".\"amount\" > 0 and \"transaction\".\"amount\" <= 100000000"
+        },
+        "transaction_description_length": {
+          "name": "transaction_description_length",
+          "value": "char_length(\"transaction\".\"description\") between 1 and 80"
+        },
+        "transaction_version_positive": {
+          "name": "transaction_version_positive",
+          "value": "\"transaction\".\"version\" >= 1"
+        },
+        "transaction_reimbursement_equal": {
+          "name": "transaction_reimbursement_equal",
+          "value": "\"transaction\".\"type\" <> 'REIMBURSEMENT' or \"transaction\".\"distribution_mode\" = 'EQUAL'"
+        },
+        "transaction_creator_consistency": {
+          "name": "transaction_creator_consistency",
+          "value": "\"transaction\".\"created_by_kind\" <> 'SYSTEM' and (\"transaction\".\"created_by_kind\" = 'ADMIN') = (\"transaction\".\"created_by_admin_id\" is not null)"
+        },
+        "transaction_status_consistency": {
+          "name": "transaction_status_consistency",
+          "value": "case \"transaction\".\"status\"\n        when 'PENDING' then \"transaction\".\"validated_at\" is null and \"transaction\".\"rejected_at\" is null and \"transaction\".\"cancelled_at\" is null\n        when 'VALIDATED' then \"transaction\".\"validated_at\" is not null and \"transaction\".\"validated_by_admin_id\" is not null\n          and \"transaction\".\"rejected_at\" is null and \"transaction\".\"cancelled_at\" is null\n        when 'REJECTED' then \"transaction\".\"rejected_at\" is not null and \"transaction\".\"rejected_by_admin_id\" is not null\n          and \"transaction\".\"validated_at\" is null and \"transaction\".\"cancelled_at\" is null\n        when 'CANCELLED' then \"transaction\".\"cancelled_at\" is not null and \"transaction\".\"cancelled_by_admin_id\" is not null\n          and \"transaction\".\"rejected_at\" is null\n      end"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.nikount": {
+      "name": "nikount",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "char(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EUR'"
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Europe/Paris'"
+        },
+        "state": {
+          "name": "state",
+          "type": "nikount_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OPEN'"
+        },
+        "state_changed_at": {
+          "name": "state_changed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "participant_token_hash": {
+          "name": "participant_token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_token_ciphertext": {
+          "name": "participant_token_ciphertext",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_token_rotated_at": {
+          "name": "participant_token_rotated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "nikount_participant_token_hash_unique": {
+          "name": "nikount_participant_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "participant_token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "nikount_name_length": {
+          "name": "nikount_name_length",
+          "value": "char_length(\"nikount\".\"name\") between 1 and 60"
+        },
+        "nikount_currency_format": {
+          "name": "nikount_currency_format",
+          "value": "\"nikount\".\"currency\" ~ '^[A-Z]{3}$'"
+        },
+        "nikount_token_hash_length": {
+          "name": "nikount_token_hash_length",
+          "value": "octet_length(\"nikount\".\"participant_token_hash\") = 32"
+        },
+        "nikount_version_positive": {
+          "name": "nikount_version_positive",
+          "value": "\"nikount\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.participant": {
+      "name": "participant",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nikount_id": {
+          "name": "nikount_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "participant_active_name_unique": {
+          "name": "participant_active_name_unique",
+          "columns": [
+            {
+              "expression": "nikount_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"name\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"participant\".\"is_active\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "participant_nikount_id_nikount_id_fk": {
+          "name": "participant_nikount_id_nikount_id_fk",
+          "tableFrom": "participant",
+          "tableTo": "nikount",
+          "columnsFrom": [
+            "nikount_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "participant_nikount_id_id_unique": {
+          "name": "participant_nikount_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "nikount_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "participant_name_length": {
+          "name": "participant_name_length",
+          "value": "char_length(\"participant\".\"name\") between 1 and 40"
+        },
+        "participant_sort_order_positive": {
+          "name": "participant_sort_order_positive",
+          "value": "\"participant\".\"sort_order\" >= 0"
+        },
+        "participant_version_positive": {
+          "name": "participant_version_positive",
+          "value": "\"participant\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.transaction_revision": {
+      "name": "transaction_revision",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nikount_id": {
+          "name": "nikount_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "snapshot": {
+          "name": "snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "changed_by_kind": {
+          "name": "changed_by_kind",
+          "type": "actor_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "changed_by_admin_id": {
+          "name": "changed_by_admin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "declared_by_participant_id": {
+          "name": "declared_by_participant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "transaction_revision_transaction_same_nikount_fk": {
+          "name": "transaction_revision_transaction_same_nikount_fk",
+          "tableFrom": "transaction_revision",
+          "tableTo": "transaction",
+          "columnsFrom": [
+            "nikount_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_revision_admin_same_nikount_fk": {
+          "name": "transaction_revision_admin_same_nikount_fk",
+          "tableFrom": "transaction_revision",
+          "tableTo": "admin_access",
+          "columnsFrom": [
+            "nikount_id",
+            "changed_by_admin_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "transaction_revision_number_unique": {
+          "name": "transaction_revision_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "transaction_id",
+            "revision"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "transaction_revision_number_positive": {
+          "name": "transaction_revision_number_positive",
+          "value": "\"transaction_revision\".\"revision\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.transaction_share": {
+      "name": "transaction_share",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nikount_id": {
+          "name": "nikount_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_id": {
+          "name": "participant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "input_value": {
+          "name": "input_value",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "transaction_share_nikount_participant_idx": {
+          "name": "transaction_share_nikount_participant_idx",
+          "columns": [
+            {
+              "expression": "nikount_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "participant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transaction_share_transaction_same_nikount_fk": {
+          "name": "transaction_share_transaction_same_nikount_fk",
+          "tableFrom": "transaction_share",
+          "tableTo": "transaction",
+          "columnsFrom": [
+            "nikount_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_share_participant_same_nikount_fk": {
+          "name": "transaction_share_participant_same_nikount_fk",
+          "tableFrom": "transaction_share",
+          "tableTo": "participant",
+          "columnsFrom": [
+            "nikount_id",
+            "participant_id"
+          ],
+          "columnsTo": [
+            "nikount_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "transaction_share_participant_unique": {
+          "name": "transaction_share_participant_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "transaction_id",
+            "participant_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "transaction_share_amount_positive": {
+          "name": "transaction_share_amount_positive",
+          "value": "\"transaction_share\".\"amount\" >= 0"
+        },
+        "transaction_share_input_positive": {
+          "name": "transaction_share_input_positive",
+          "value": "\"transaction_share\".\"input_value\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.actor_kind": {
+      "name": "actor_kind",
+      "schema": "public",
+      "values": [
+        "ADMIN",
+        "PARTICIPANT",
+        "SYSTEM"
+      ]
+    },
+    "public.distribution_mode": {
+      "name": "distribution_mode",
+      "schema": "public",
+      "values": [
+        "EQUAL",
+        "SHARES",
+        "PERCENT",
+        "AMOUNT"
+      ]
+    },
+    "public.nikount_state": {
+      "name": "nikount_state",
+      "schema": "public",
+      "values": [
+        "OPEN",
+        "SETTLEMENT",
+        "CLOSED"
+      ]
+    },
+    "public.transaction_category": {
+      "name": "transaction_category",
+      "schema": "public",
+      "values": [
+        "FOOD",
+        "TRANSPORT",
+        "GROCERIES",
+        "LODGING",
+        "ACTIVITY",
+        "OTHER"
+      ]
+    },
+    "public.transaction_status": {
+      "name": "transaction_status",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "VALIDATED",
+        "REJECTED",
+        "CANCELLED"
+      ]
+    },
+    "public.transaction_type": {
+      "name": "transaction_type",
+      "schema": "public",
+      "values": [
+        "EXPENSE",
+        "REIMBURSEMENT"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

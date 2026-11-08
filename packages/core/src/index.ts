@@ -5,3 +5,4 @@
  */
 export * from './money.js';
 export * from './rules.js';
+export * from './split.js';

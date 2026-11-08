@@ -70,6 +70,8 @@ nominative des actions.
 
 Règle : il reste toujours **au moins un accès admin non révoqué** (on ne peut pas révoquer le dernier).
 
+UNIQUE `(nikount_id, id)` : cible des clés composites `created_by_admin_id`, `validated_by_admin_id`, `rejected_by_admin_id`, `cancelled_by_admin_id` et `changed_by_admin_id`.
+
 ### `transaction`
 
 | Colonne                                                    | Type        | Notes                                                            |

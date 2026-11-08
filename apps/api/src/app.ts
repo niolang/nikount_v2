@@ -18,6 +18,7 @@ import type { AppInstance } from './lib/types.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { protectedNikountRoutes, publicNikountRoutes } from './modules/nikounts/routes.js';
 import { participantRoutes } from './modules/participants/routes.js';
+import { transactionRoutes } from './modules/transactions/routes.js';
 
 export interface AppDependencies {
   config: Config;
@@ -92,6 +93,7 @@ export async function buildApp(deps: AppDependencies): Promise<AppInstance> {
         protectedApi.addHook('onRequest', createAuthenticator({ db, failureLimiter }));
         await protectedApi.register(protectedNikountRoutes, routeOptions);
         await protectedApi.register(participantRoutes, { db });
+        await protectedApi.register(transactionRoutes, { db });
       });
     },
     { prefix: '/api/v1' },

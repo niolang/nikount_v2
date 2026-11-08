@@ -28,15 +28,15 @@
 }
 ```
 
-| HTTP | Codes typiques                                                                                                      |
-| ---- | ------------------------------------------------------------------------------------------------------------------- |
-| 400  | `VALIDATION_ERROR`, `SPLIT_*`, `PAYER_INACTIVE`, `REIMBURSEMENT_SELF`                                               |
-| 401  | `INVALID_TOKEN` (token inconnu, révoqué ou absent — message identique)                                              |
-| 403  | `ADMIN_REQUIRED`                                                                                                    |
-| 404  | `NOT_FOUND`                                                                                                         |
-| 409  | `VERSION_CONFLICT`, `INVALID_STATE` (ex. dépense en `SETTLEMENT`), `INVALID_STATUS_TRANSITION`, `PENDING_REMAINING` |
-| 429  | `RATE_LIMITED`                                                                                                      |
-| 500  | `INTERNAL_ERROR`                                                                                                    |
+| HTTP | Codes typiques                                                                                                                                                                                                                               |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400  | `VALIDATION_ERROR`, `SPLIT_*` (`SPLIT_PERCENT_NOT_100`, `SPLIT_AMOUNT_SUM_MISMATCH`, `SPLIT_DUPLICATE_PARTICIPANT`, `SPLIT_INVALID_VALUE`…), `PAYER_INVALID`, `PARTICIPANT_INVALID`, `REIMBURSEMENT_INVALID`, `DECLARED_PARTICIPANT_INVALID` |
+| 401  | `INVALID_TOKEN` (token inconnu, révoqué ou absent — message identique)                                                                                                                                                                       |
+| 403  | `ADMIN_REQUIRED`                                                                                                                                                                                                                             |
+| 404  | `NOT_FOUND`                                                                                                                                                                                                                                  |
+| 409  | `VERSION_CONFLICT`, `INVALID_STATE` (ex. dépense en `SETTLEMENT`), `INVALID_STATUS_TRANSITION`, `PENDING_REMAINING`                                                                                                                          |
+| 429  | `RATE_LIMITED`                                                                                                                                                                                                                               |
+| 500  | `INTERNAL_ERROR`                                                                                                                                                                                                                             |
 
 ## 2. Routes
 
@@ -78,16 +78,16 @@ Légende rôle : **P** participant, **A** admin, **—** public.
 
 ### Opérations
 
-| Méthode | Route                        | Rôle | Description                                                                                                                         |
-| ------- | ---------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/transactions`              | P/A  | Filtres : `type`, `status[]`, `payerId`, `participantId`, `q`, `from`, `to`, `category` ; tri : `occurredOn`, `amount`, `createdAt` |
-| GET     | `/transactions/:id`          | P/A  | Détail + parts (`inputValue`, `amount`) + acteurs (libellés) + révisions                                                            |
-| POST    | `/transactions`              | P/A  | Création (voir corps ci-dessous). P → `PENDING`, A → `VALIDATED`                                                                    |
-| PUT     | `/transactions/:id`          | A    | Remplacement complet (montant, payeur, parts…) + `version` + `reason?` → nouvelle révision                                          |
-| POST    | `/transactions/:id/validate` | A    | `PENDING → VALIDATED`                                                                                                               |
-| POST    | `/transactions/:id/reject`   | A    | `PENDING → REJECTED`, `{ reason? }`                                                                                                 |
-| POST    | `/transactions/:id/cancel`   | A    | `PENDING/VALIDATED → CANCELLED`, `{ reason? }`                                                                                      |
-| POST    | `/transactions/bulk`         | A    | `{ action: "validate"\|"reject"\|"cancel", ids[] (≤ 200), reason? }` — **tout ou rien**                                             |
+| Méthode | Route                        | Rôle | Description                                                                                                                                                                                                                                                         |
+| ------- | ---------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/transactions`              | P/A  | Toutes les opérations, plus récentes d’abord (date métier puis saisie), avec leurs parts. _(Phases 6 et 10 : filtres `type`, `status[]`, `payerId`, `participantId`, `q`, `from`, `to`, `category`, tri, pagination)_                                               |
+| GET     | `/transactions/:id`          | P/A  | Détail + parts (`inputValue`, `amount`) + acteurs (libellés) + révisions                                                                                                                                                                                            |
+| POST    | `/transactions`              | P/A  | Création (voir corps ci-dessous). P → `PENDING`, A → `VALIDATED`. **201** si créée, **200** si le `clientRequestId` est déjà connu (renvoi de l’opération existante). Dépense : nikount `OPEN` ; remboursement : `OPEN` ou `SETTLEMENT` (sinon `409 INVALID_STATE`) |
+| PUT     | `/transactions/:id`          | A    | Remplacement complet (montant, payeur, parts…) + `version` + `reason?` → nouvelle révision                                                                                                                                                                          |
+| POST    | `/transactions/:id/validate` | A    | `PENDING → VALIDATED`                                                                                                                                                                                                                                               |
+| POST    | `/transactions/:id/reject`   | A    | `PENDING → REJECTED`, `{ reason? }`                                                                                                                                                                                                                                 |
+| POST    | `/transactions/:id/cancel`   | A    | `PENDING/VALIDATED → CANCELLED`, `{ reason? }`                                                                                                                                                                                                                      |
+| POST    | `/transactions/bulk`         | A    | `{ action: "validate"\|"reject"\|"cancel", ids[] (≤ 200), reason? }` — **tout ou rien**                                                                                                                                                                             |
 
 Corps de création :
 

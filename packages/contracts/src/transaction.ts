@@ -1,0 +1,117 @@
+import { z } from 'zod';
+import {
+  ActorKind,
+  DistributionMode,
+  TransactionCategory,
+  TransactionStatus,
+  TransactionType,
+} from './enums.js';
+import { cleanText } from './text.js';
+
+/** Montant maximal d'une opération, en unités mineures (1 000 000,00). */
+export const MAX_AMOUNT = 100_000_000;
+const MAX_CONCERNED = 200;
+
+/** Nombre à 2 décimales au plus (parts, pourcentages), tolérant aux imprécisions flottantes. */
+const twoDecimals = z
+  .number()
+  .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+    message: '2 décimales au plus',
+  });
+
+const MinorAmount = z.number().int().min(1).max(MAX_AMOUNT);
+
+const ShareEntry = <T extends z.ZodType<number>>(value: T) =>
+  z.strictObject({ participantId: z.uuid(), value });
+
+/**
+ * Répartition saisie. Le client n'envoie jamais les montants calculés (sauf en mode AMOUNT,
+ * où ce sont les valeurs saisies) : le serveur les recalcule avec @nikount/core.
+ */
+export const DistributionRequest = z.discriminatedUnion('mode', [
+  z.strictObject({
+    mode: z.literal('EQUAL'),
+    participantIds: z.array(z.uuid()).min(1).max(MAX_CONCERNED),
+  }),
+  z.strictObject({
+    mode: z.literal('SHARES'),
+    shares: z
+      .array(ShareEntry(twoDecimals.pipe(z.number().gt(0).max(10_000))))
+      .min(1)
+      .max(MAX_CONCERNED),
+  }),
+  z.strictObject({
+    mode: z.literal('PERCENT'),
+    shares: z
+      .array(ShareEntry(twoDecimals.pipe(z.number().gt(0).max(100))))
+      .min(1)
+      .max(MAX_CONCERNED),
+  }),
+  z.strictObject({
+    mode: z.literal('AMOUNT'),
+    shares: z
+      .array(ShareEntry(z.number().int().min(0).max(MAX_AMOUNT)))
+      .min(1)
+      .max(MAX_CONCERNED),
+  }),
+]);
+export type DistributionRequest = z.infer<typeof DistributionRequest>;
+
+/** Date métier (jour de l'événement), sans heure. */
+export const OccurredOn = z.iso
+  .date()
+  .refine((value) => value >= '2000-01-01' && value <= '2100-12-31', 'Date hors limites');
+
+export const CreateTransactionRequest = z.strictObject({
+  /** Généré à l'ouverture du formulaire : un double envoi ne crée qu'une opération. */
+  clientRequestId: z.uuid(),
+  type: TransactionType,
+  amount: MinorAmount,
+  description: cleanText(1, 80),
+  category: TransactionCategory.nullable().default(null),
+  occurredOn: OccurredOn,
+  payerId: z.uuid(),
+  distribution: DistributionRequest,
+  /** Identité déclarée de l'auteur (participant). Ignorée pour un admin. */
+  declaredByParticipantId: z.uuid().optional(),
+});
+export type CreateTransactionRequest = z.input<typeof CreateTransactionRequest>;
+
+export const TransactionShareView = z.object({
+  participantId: z.uuid(),
+  inputValue: z.number(),
+  amount: z.number().int(),
+});
+export type TransactionShareView = z.infer<typeof TransactionShareView>;
+
+const AdminRef = z.object({ id: z.uuid(), label: z.string() }).nullable();
+
+export const TransactionView = z.object({
+  id: z.uuid(),
+  type: TransactionType,
+  status: TransactionStatus,
+  amount: z.number().int(),
+  description: z.string(),
+  category: TransactionCategory.nullable(),
+  occurredOn: z.string(),
+  payerId: z.uuid(),
+  distributionMode: DistributionMode,
+  shares: z.array(TransactionShareView),
+  createdAt: z.iso.datetime({ offset: true }),
+  createdBy: z.object({
+    kind: ActorKind,
+    admin: AdminRef,
+    declaredParticipantId: z.uuid().nullable(),
+  }),
+  validatedAt: z.iso.datetime({ offset: true }).nullable(),
+  validatedBy: AdminRef,
+  version: z.number().int(),
+});
+export type TransactionView = z.infer<typeof TransactionView>;
+
+export const TransactionListResponse = z.object({
+  transactions: z.array(TransactionView),
+});
+export type TransactionListResponse = z.infer<typeof TransactionListResponse>;
+
+export const TransactionIdParams = z.strictObject({ id: z.uuid() });

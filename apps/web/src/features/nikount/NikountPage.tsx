@@ -7,6 +7,7 @@ import { PageShell } from '../../components/ui';
 import { forgetNikount, rememberNikount } from '../../lib/recent-nikounts';
 import { NikountHome } from './NikountHome';
 import { ManageParticipantsPage } from './ManageParticipantsPage';
+import { ExpenseFormPage } from '../transactions/ExpenseFormPage';
 
 /**
  * Point d'entrée d'un nikount, pour `/n/:token/*` (participant) et `/a/:token/*` (admin).
@@ -57,6 +58,7 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
   return (
     <Routes>
       <Route index element={<NikountHome token={token} me={me} />} />
+      <Route path="expenses/new" element={<ExpenseFormPage token={token} me={me} />} />
       <Route
         path="participants"
         element={

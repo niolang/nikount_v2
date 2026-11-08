@@ -4,11 +4,13 @@ import {
   boolean,
   char,
   check,
+  date,
   customType,
   foreignKey,
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -17,7 +19,14 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { ACTOR_KINDS, NIKOUNT_STATES } from '@nikount/contracts';
+import {
+  ACTOR_KINDS,
+  DISTRIBUTION_MODES,
+  NIKOUNT_STATES,
+  TRANSACTION_CATEGORIES,
+  TRANSACTION_STATUSES,
+  TRANSACTION_TYPES,
+} from '@nikount/contracts';
 
 /**
  * Schéma PostgreSQL — voir docs/data-model.md.
@@ -115,6 +124,7 @@ export const adminAccess = pgTable(
   },
   (t) => [
     index('admin_access_nikount_idx').on(t.nikountId),
+    unique('admin_access_nikount_id_id_unique').on(t.nikountId, t.id),
     foreignKey({
       name: 'admin_access_participant_same_nikount_fk',
       columns: [t.nikountId, t.participantId],
@@ -150,5 +160,177 @@ export const auditEvent = pgTable(
       'audit_event_actor_consistency',
       sql`(${t.actorKind} = 'ADMIN') = (${t.actorAdminId} is not null)`,
     ),
+  ],
+);
+
+// --- Opérations financières (docs/data-model.md) ------------------------------------------
+
+export const transactionType = pgEnum('transaction_type', TRANSACTION_TYPES);
+export const transactionStatus = pgEnum('transaction_status', TRANSACTION_STATUSES);
+export const distributionMode = pgEnum('distribution_mode', DISTRIBUTION_MODES);
+export const transactionCategory = pgEnum('transaction_category', TRANSACTION_CATEGORIES);
+
+/**
+ * Opération financière : dépense ou remboursement, même entité (docs/product.md §5).
+ * Jamais supprimée (trigger, migration 0005) : annulée. Toutes les références vers des
+ * participants ou des admins passent par des clés composites limitées au même nikount.
+ */
+export const financialTransaction = pgTable(
+  'transaction',
+  {
+    id: uuid('id').primaryKey(),
+    nikountId: uuid('nikount_id')
+      .notNull()
+      .references(() => nikount.id),
+    type: transactionType('type').notNull(),
+    status: transactionStatus('status').notNull(),
+    /** Unités mineures (centimes). */
+    amount: bigint('amount', { mode: 'number' }).notNull(),
+    description: text('description').notNull(),
+    category: transactionCategory('category'),
+    occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
+    payerId: uuid('payer_id').notNull(),
+    distributionMode: distributionMode('distribution_mode').notNull(),
+    createdByKind: actorKind('created_by_kind').notNull(),
+    createdByAdminId: uuid('created_by_admin_id'),
+    /** Identité déclarée (non vérifiée) de l'auteur participant. */
+    declaredByParticipantId: uuid('declared_by_participant_id'),
+    /** Idempotence : une même saisie renvoyée deux fois ne crée qu'une opération. */
+    clientRequestId: uuid('client_request_id').notNull(),
+    validatedAt: timestamp('validated_at', { withTimezone: true }),
+    validatedByAdminId: uuid('validated_by_admin_id'),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    rejectedByAdminId: uuid('rejected_by_admin_id'),
+    rejectionReason: text('rejection_reason'),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledByAdminId: uuid('cancelled_by_admin_id'),
+    cancellationReason: text('cancellation_reason'),
+    version: integer('version').notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique('transaction_nikount_id_id_unique').on(t.nikountId, t.id),
+    unique('transaction_client_request_unique').on(t.nikountId, t.clientRequestId),
+    index('transaction_nikount_status_idx').on(t.nikountId, t.status),
+    index('transaction_nikount_occurred_idx').on(
+      t.nikountId,
+      t.occurredOn.desc(),
+      t.createdAt.desc(),
+    ),
+    foreignKey({
+      name: 'transaction_payer_same_nikount_fk',
+      columns: [t.nikountId, t.payerId],
+      foreignColumns: [participant.nikountId, participant.id],
+    }),
+    foreignKey({
+      name: 'transaction_declared_by_same_nikount_fk',
+      columns: [t.nikountId, t.declaredByParticipantId],
+      foreignColumns: [participant.nikountId, participant.id],
+    }),
+    foreignKey({
+      name: 'transaction_created_by_same_nikount_fk',
+      columns: [t.nikountId, t.createdByAdminId],
+      foreignColumns: [adminAccess.nikountId, adminAccess.id],
+    }),
+    foreignKey({
+      name: 'transaction_validated_by_same_nikount_fk',
+      columns: [t.nikountId, t.validatedByAdminId],
+      foreignColumns: [adminAccess.nikountId, adminAccess.id],
+    }),
+    foreignKey({
+      name: 'transaction_rejected_by_same_nikount_fk',
+      columns: [t.nikountId, t.rejectedByAdminId],
+      foreignColumns: [adminAccess.nikountId, adminAccess.id],
+    }),
+    foreignKey({
+      name: 'transaction_cancelled_by_same_nikount_fk',
+      columns: [t.nikountId, t.cancelledByAdminId],
+      foreignColumns: [adminAccess.nikountId, adminAccess.id],
+    }),
+    check('transaction_amount_range', sql`${t.amount} > 0 and ${t.amount} <= 100000000`),
+    check('transaction_description_length', sql`char_length(${t.description}) between 1 and 80`),
+    check('transaction_version_positive', sql`${t.version} >= 1`),
+    check(
+      'transaction_reimbursement_equal',
+      sql`${t.type} <> 'REIMBURSEMENT' or ${t.distributionMode} = 'EQUAL'`,
+    ),
+    check(
+      'transaction_creator_consistency',
+      sql`${t.createdByKind} <> 'SYSTEM' and (${t.createdByKind} = 'ADMIN') = (${t.createdByAdminId} is not null)`,
+    ),
+    // Chaque statut porte ses traces (qui, quand) : un statut sans trace est impossible.
+    check(
+      'transaction_status_consistency',
+      sql`case ${t.status}
+        when 'PENDING' then ${t.validatedAt} is null and ${t.rejectedAt} is null and ${t.cancelledAt} is null
+        when 'VALIDATED' then ${t.validatedAt} is not null and ${t.validatedByAdminId} is not null
+          and ${t.rejectedAt} is null and ${t.cancelledAt} is null
+        when 'REJECTED' then ${t.rejectedAt} is not null and ${t.rejectedByAdminId} is not null
+          and ${t.validatedAt} is null and ${t.cancelledAt} is null
+        when 'CANCELLED' then ${t.cancelledAt} is not null and ${t.cancelledByAdminId} is not null
+          and ${t.rejectedAt} is null
+      end`,
+    ),
+  ],
+);
+
+/** Une ligne par concerné : valeur saisie et montant final figé (docs/data-model.md). */
+export const transactionShare = pgTable(
+  'transaction_share',
+  {
+    id: uuid('id').primaryKey(),
+    transactionId: uuid('transaction_id').notNull(),
+    nikountId: uuid('nikount_id').notNull(),
+    participantId: uuid('participant_id').notNull(),
+    inputValue: numeric('input_value', { precision: 12, scale: 2, mode: 'number' }).notNull(),
+    amount: bigint('amount', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    unique('transaction_share_participant_unique').on(t.transactionId, t.participantId),
+    index('transaction_share_nikount_participant_idx').on(t.nikountId, t.participantId),
+    foreignKey({
+      name: 'transaction_share_transaction_same_nikount_fk',
+      columns: [t.nikountId, t.transactionId],
+      foreignColumns: [financialTransaction.nikountId, financialTransaction.id],
+    }),
+    foreignKey({
+      name: 'transaction_share_participant_same_nikount_fk',
+      columns: [t.nikountId, t.participantId],
+      foreignColumns: [participant.nikountId, participant.id],
+    }),
+    check('transaction_share_amount_positive', sql`${t.amount} >= 0`),
+    check('transaction_share_input_positive', sql`${t.inputValue} >= 0`),
+  ],
+);
+
+/** Instantané complet de l'opération à chaque création et modification (append-only). */
+export const transactionRevision = pgTable(
+  'transaction_revision',
+  {
+    id: uuid('id').primaryKey(),
+    transactionId: uuid('transaction_id').notNull(),
+    nikountId: uuid('nikount_id').notNull(),
+    revision: integer('revision').notNull(),
+    snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+    changedByKind: actorKind('changed_by_kind').notNull(),
+    changedByAdminId: uuid('changed_by_admin_id'),
+    declaredByParticipantId: uuid('declared_by_participant_id'),
+    reason: text('reason'),
+    createdAt,
+  },
+  (t) => [
+    unique('transaction_revision_number_unique').on(t.transactionId, t.revision),
+    foreignKey({
+      name: 'transaction_revision_transaction_same_nikount_fk',
+      columns: [t.nikountId, t.transactionId],
+      foreignColumns: [financialTransaction.nikountId, financialTransaction.id],
+    }),
+    foreignKey({
+      name: 'transaction_revision_admin_same_nikount_fk',
+      columns: [t.nikountId, t.changedByAdminId],
+      foreignColumns: [adminAccess.nikountId, adminAccess.id],
+    }),
+    check('transaction_revision_number_positive', sql`${t.revision} >= 1`),
   ],
 );

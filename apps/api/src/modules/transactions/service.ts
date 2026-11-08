@@ -1,0 +1,313 @@
+import type { z } from 'zod';
+import type { CreateTransactionRequest, TransactionView } from '@nikount/contracts';
+import {
+  computeSplit,
+  isActionAllowed,
+  SplitError,
+  type ComputedShare,
+  type DistributionInput,
+} from '@nikount/core';
+import type { AccessContext } from '../../auth/access.js';
+import type { Database } from '../../db/client.js';
+import { isUniqueViolation } from '../../lib/db-errors.js';
+import { DomainError } from '../../lib/errors.js';
+import { uuidv7 } from '../../lib/uuid.js';
+import { recordAuditEvent } from '../audit/repository.js';
+import { findAdminAccess } from '../nikounts/repository.js';
+import { getNikount } from '../nikounts/service.js';
+import { listParticipants, type ParticipantRow } from '../participants/repository.js';
+import * as repo from './repository.js';
+
+export type CreateTransactionInput = z.output<typeof CreateTransactionRequest>;
+
+interface RequestMeta {
+  requestId: string;
+}
+
+const CLIENT_REQUEST_UNIQUE = 'transaction_client_request_unique';
+
+// --- Vues ------------------------------------------------------------------------------------
+
+function toView(
+  row: repo.TransactionRow,
+  shares: repo.ShareRow[],
+  labels: Map<string, string>,
+): TransactionView {
+  const adminRef = (id: string | null) => (id ? { id, label: labels.get(id) ?? '' } : null);
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    amount: row.amount,
+    description: row.description,
+    category: row.category,
+    occurredOn: row.occurredOn,
+    payerId: row.payerId,
+    distributionMode: row.distributionMode,
+    shares: shares.map((s) => ({
+      participantId: s.participantId,
+      inputValue: s.inputValue,
+      amount: s.amount,
+    })),
+    createdAt: row.createdAt.toISOString(),
+    createdBy: {
+      kind: row.createdByKind,
+      admin: adminRef(row.createdByAdminId),
+      declaredParticipantId: row.declaredByParticipantId,
+    },
+    validatedAt: row.validatedAt?.toISOString() ?? null,
+    validatedBy: adminRef(row.validatedByAdminId),
+    version: row.version,
+  };
+}
+
+async function viewsOf(
+  db: Database,
+  nikountId: string,
+  rows: repo.TransactionRow[],
+): Promise<TransactionView[]> {
+  const [shares, labels] = await Promise.all([
+    repo.listShares(
+      db,
+      nikountId,
+      rows.map((r) => r.id),
+    ),
+    repo.adminLabels(db, nikountId),
+  ]);
+  const byTransaction = new Map<string, repo.ShareRow[]>();
+  for (const share of shares) {
+    byTransaction.set(share.transactionId, [
+      ...(byTransaction.get(share.transactionId) ?? []),
+      share,
+    ]);
+  }
+  return rows.map((row) => toView(row, byTransaction.get(row.id) ?? [], labels));
+}
+
+export async function listTransactions(db: Database, nikountId: string) {
+  return viewsOf(db, nikountId, await repo.listTransactions(db, nikountId));
+}
+
+export async function getTransaction(
+  db: Database,
+  nikountId: string,
+  transactionId: string,
+): Promise<TransactionView> {
+  const row = await repo.findTransaction(db, nikountId, transactionId);
+  // Introuvable dans CE nikount : même réponse qu'un identifiant inexistant (anti-IDOR).
+  if (!row) throw new DomainError(404, 'NOT_FOUND', 'Ressource introuvable.');
+  const [view] = await viewsOf(db, nikountId, [row]);
+  if (!view) throw new Error('Vue introuvable');
+  return view;
+}
+
+// --- Création --------------------------------------------------------------------------------
+
+function concernedIds(distribution: CreateTransactionInput['distribution']): string[] {
+  return distribution.mode === 'EQUAL'
+    ? distribution.participantIds
+    : distribution.shares.map((s) => s.participantId);
+}
+
+/**
+ * Remet les concernés dans l'ordre d'affichage des participants : c'est cet ordre qui départage
+ * les centimes d'arrondi (D2), quel que soit l'ordre envoyé par le client.
+ */
+function orderedDistribution(
+  distribution: CreateTransactionInput['distribution'],
+  order: Map<string, number>,
+): DistributionInput {
+  const rank = (id: string) => order.get(id) ?? Number.MAX_SAFE_INTEGER;
+  if (distribution.mode === 'EQUAL') {
+    return {
+      mode: 'EQUAL',
+      participantIds: [...distribution.participantIds].sort((a, b) => rank(a) - rank(b)),
+    };
+  }
+  return {
+    mode: distribution.mode,
+    shares: [...distribution.shares].sort((a, b) => rank(a.participantId) - rank(b.participantId)),
+  };
+}
+
+function split(amount: number, distribution: DistributionInput): ComputedShare[] {
+  try {
+    return computeSplit(amount, distribution);
+  } catch (error) {
+    if (error instanceof SplitError) {
+      throw new DomainError(400, `SPLIT_${error.code}`, error.message, error.details);
+    }
+    throw error;
+  }
+}
+
+function validateParties(input: CreateTransactionInput, active: Map<string, ParticipantRow>): void {
+  if (!active.has(input.payerId)) {
+    throw new DomainError(400, 'PAYER_INVALID', 'Le payeur doit être un participant actif.', {
+      payerId: input.payerId,
+    });
+  }
+  const unknown = concernedIds(input.distribution).filter((id) => !active.has(id));
+  if (unknown.length > 0) {
+    throw new DomainError(
+      400,
+      'PARTICIPANT_INVALID',
+      'Chaque concerné doit être un participant actif.',
+      { participantIds: unknown },
+    );
+  }
+  if (input.type === 'REIMBURSEMENT') {
+    const concerned = concernedIds(input.distribution);
+    if (
+      input.distribution.mode !== 'EQUAL' ||
+      concerned.length !== 1 ||
+      concerned[0] === input.payerId
+    ) {
+      throw new DomainError(
+        400,
+        'REIMBURSEMENT_INVALID',
+        'Un remboursement va d’une personne vers une seule autre personne.',
+      );
+    }
+  }
+}
+
+/** Identité déclarée de l'auteur : admin → son participant ; participant → déclaration vérifiée. */
+async function declaredAuthor(
+  db: Database,
+  access: AccessContext,
+  input: CreateTransactionInput,
+  active: Map<string, ParticipantRow>,
+): Promise<string | null> {
+  if (access.adminId) {
+    return (await findAdminAccess(db, access.nikountId, access.adminId))?.participantId ?? null;
+  }
+  const declared = input.declaredByParticipantId ?? null;
+  if (declared !== null && !active.has(declared)) {
+    throw new DomainError(
+      400,
+      'DECLARED_PARTICIPANT_INVALID',
+      'L’auteur déclaré doit être un participant actif.',
+    );
+  }
+  return declared;
+}
+
+/**
+ * Crée une opération. Un participant crée une opération EN ATTENTE ; un admin, une opération
+ * VALIDÉE d'emblée (règle 8). Idempotent : un `clientRequestId` déjà vu renvoie l'existante.
+ */
+export async function createTransaction(
+  db: Database,
+  access: AccessContext,
+  input: CreateTransactionInput,
+  meta: RequestMeta,
+): Promise<{ created: boolean; transaction: TransactionView }> {
+  const existing = await repo.findByClientRequestId(db, access.nikountId, input.clientRequestId);
+  if (existing) {
+    return { created: false, transaction: await getTransaction(db, access.nikountId, existing.id) };
+  }
+
+  try {
+    const id = await db.transaction(async (tx) => {
+      const nikount = await getNikount(tx, access.nikountId);
+      const action = input.type === 'EXPENSE' ? 'CREATE_EXPENSE' : 'CREATE_REIMBURSEMENT';
+      if (!isActionAllowed(action, nikount.state)) {
+        throw new DomainError(
+          409,
+          'INVALID_STATE',
+          input.type === 'EXPENSE'
+            ? 'Les nouvelles dépenses ne sont plus acceptées sur ce nikount.'
+            : 'Ce nikount est clôturé.',
+          { state: nikount.state },
+        );
+      }
+
+      const participants = await listParticipants(tx, access.nikountId);
+      const active = new Map(participants.filter((p) => p.isActive).map((p) => [p.id, p]));
+      validateParties(input, active);
+      const declaredBy = await declaredAuthor(tx, access, input, active);
+
+      const order = new Map(participants.map((p) => [p.id, p.sortOrder]));
+      const shares = split(input.amount, orderedDistribution(input.distribution, order));
+
+      const isAdmin = access.role === 'ADMIN' && access.adminId !== null;
+      const now = new Date();
+      const transactionId = uuidv7();
+      const row = await repo.insertTransaction(tx, {
+        id: transactionId,
+        nikountId: access.nikountId,
+        type: input.type,
+        status: isAdmin ? 'VALIDATED' : 'PENDING',
+        amount: input.amount,
+        description: input.description,
+        category: input.category,
+        occurredOn: input.occurredOn,
+        payerId: input.payerId,
+        distributionMode: input.distribution.mode,
+        createdByKind: isAdmin ? 'ADMIN' : 'PARTICIPANT',
+        createdByAdminId: access.adminId,
+        declaredByParticipantId: declaredBy,
+        clientRequestId: input.clientRequestId,
+        validatedAt: isAdmin ? now : null,
+        validatedByAdminId: isAdmin ? access.adminId : null,
+      });
+      const shareRows = await repo.insertShares(
+        tx,
+        shares.map((share) => ({
+          id: uuidv7(),
+          transactionId,
+          nikountId: access.nikountId,
+          participantId: share.participantId,
+          inputValue: share.inputValue,
+          amount: share.amount,
+        })),
+      );
+
+      const snapshot = toView(row, shareRows, new Map());
+      await repo.insertRevision(tx, {
+        id: uuidv7(),
+        transactionId,
+        nikountId: access.nikountId,
+        revision: 1,
+        snapshot: { snapshotVersion: 1, ...snapshot },
+        changedByKind: isAdmin ? 'ADMIN' : 'PARTICIPANT',
+        changedByAdminId: access.adminId,
+        declaredByParticipantId: declaredBy,
+      });
+      await recordAuditEvent(tx, {
+        nikountId: access.nikountId,
+        actorKind: isAdmin ? 'ADMIN' : 'PARTICIPANT',
+        actorAdminId: access.adminId,
+        actorParticipantId: declaredBy,
+        action: 'transaction.created',
+        entityType: 'transaction',
+        entityId: transactionId,
+        data: {
+          type: input.type,
+          status: row.status,
+          amount: input.amount,
+          description: input.description,
+          payerId: input.payerId,
+          distributionMode: input.distribution.mode,
+        },
+        requestId: meta.requestId,
+      });
+      return transactionId;
+    });
+
+    return { created: true, transaction: await getTransaction(db, access.nikountId, id) };
+  } catch (error) {
+    // Deux envois simultanés de la même saisie : le second renvoie l'opération du premier.
+    if (isUniqueViolation(error, CLIENT_REQUEST_UNIQUE)) {
+      const winner = await repo.findByClientRequestId(db, access.nikountId, input.clientRequestId);
+      if (winner) {
+        return {
+          created: false,
+          transaction: await getTransaction(db, access.nikountId, winner.id),
+        };
+      }
+    }
+    throw error;
+  }
+}
