@@ -1,9 +1,11 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   char,
   check,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -11,6 +13,8 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { ACTOR_KINDS, NIKOUNT_STATES } from '@nikount/contracts';
@@ -60,6 +64,37 @@ export const nikount = pgTable(
   ],
 );
 
+/**
+ * Participant d'un nikount. Jamais supprimé (il peut figurer dans des opérations) : désactivé.
+ * UNIQUE (nikount_id, id) sert de cible aux clés étrangères composites, qui empêchent en base
+ * qu'une ligne d'un nikount référence un participant d'un autre nikount (anti-IDOR).
+ */
+export const participant = pgTable(
+  'participant',
+  {
+    id: uuid('id').primaryKey(),
+    nikountId: uuid('nikount_id')
+      .notNull()
+      .references(() => nikount.id),
+    name: text('name').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    sortOrder: integer('sort_order').notNull(),
+    version: integer('version').notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique('participant_nikount_id_id_unique').on(t.nikountId, t.id),
+    // Deux participants ACTIFS d'un même nikount ne peuvent pas porter le même nom (casse ignorée).
+    uniqueIndex('participant_active_name_unique')
+      .on(t.nikountId, sql`lower(${t.name})`)
+      .where(sql`${t.isActive}`),
+    check('participant_name_length', sql`char_length(${t.name}) between 1 and 40`),
+    check('participant_sort_order_positive', sql`${t.sortOrder} >= 0`),
+    check('participant_version_positive', sql`${t.version} >= 1`),
+  ],
+);
+
 /** Un lien admin = une ligne : plusieurs admins, révocation individuelle, actions nominatives. */
 export const adminAccess = pgTable(
   'admin_access',
@@ -69,6 +104,8 @@ export const adminAccess = pgTable(
       .notNull()
       .references(() => nikount.id),
     label: text('label').notNull(),
+    /** Participant que représente cet admin (NULL : admin non participant, ex. trésorier). */
+    participantId: uuid('participant_id'),
     tokenHash: bytea('token_hash').notNull().unique(),
     /** NULL pour le créateur du nikount. */
     createdByAdminId: uuid('created_by_admin_id'),
@@ -78,6 +115,11 @@ export const adminAccess = pgTable(
   },
   (t) => [
     index('admin_access_nikount_idx').on(t.nikountId),
+    foreignKey({
+      name: 'admin_access_participant_same_nikount_fk',
+      columns: [t.nikountId, t.participantId],
+      foreignColumns: [participant.nikountId, participant.id],
+    }),
     check('admin_access_label_length', sql`char_length(${t.label}) between 1 and 40`),
     check('admin_access_token_hash_length', sql`octet_length(${t.tokenHash}) = 32`),
   ],

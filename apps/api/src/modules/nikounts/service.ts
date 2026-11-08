@@ -1,11 +1,12 @@
 import type { z } from 'zod';
-import type { CreateNikountRequest, NikountView } from '@nikount/contracts';
+import type { AdminView, CreateNikountRequest, NikountView } from '@nikount/contracts';
 import type { Database } from '../../db/client.js';
 import { DomainError } from '../../lib/errors.js';
 import type { SecretBox } from '../../lib/secret-box.js';
 import { generateToken, hashToken } from '../../lib/tokens.js';
 import { uuidv7 } from '../../lib/uuid.js';
 import { recordAuditEvent } from '../audit/repository.js';
+import { insertParticipants } from '../participants/repository.js';
 import * as repo from './repository.js';
 
 /** Données de création après validation et normalisation par le schéma Zod. */
@@ -40,6 +41,16 @@ export async function createNikount(
   const nikountId = uuidv7();
   const adminId = uuidv7();
 
+  // Le créateur, s'il participe, est le premier participant (ordre d'affichage 0).
+  const names = [...(input.adminIsParticipant ? [input.adminLabel] : []), ...input.participants];
+  const participantRows = names.map((name, sortOrder) => ({
+    id: uuidv7(),
+    nikountId,
+    name,
+    sortOrder,
+  }));
+  const adminParticipantId = input.adminIsParticipant ? (participantRows[0]?.id ?? null) : null;
+
   const { nikountRow, adminRow } = await db.transaction(async (tx) => {
     const nikountRow = await repo.insertNikount(tx, {
       id: nikountId,
@@ -48,10 +59,12 @@ export async function createNikount(
       participantTokenHash: hashToken(participantToken),
       participantTokenCiphertext: secretBox.seal(participantToken, nikountId),
     });
+    await insertParticipants(tx, participantRows);
     const adminRow = await repo.insertAdminAccess(tx, {
       id: adminId,
       nikountId,
       label: input.adminLabel,
+      participantId: adminParticipantId,
       tokenHash: hashToken(adminToken),
     });
     await recordAuditEvent(tx, {
@@ -61,7 +74,12 @@ export async function createNikount(
       action: 'nikount.created',
       entityType: 'nikount',
       entityId: nikountId,
-      data: { name: input.name, currency: input.currency, adminLabel: input.adminLabel },
+      data: {
+        name: input.name,
+        currency: input.currency,
+        adminLabel: input.adminLabel,
+        participants: names,
+      },
       requestId: meta.requestId,
     });
     return { nikountRow, adminRow };
@@ -69,10 +87,14 @@ export async function createNikount(
 
   return {
     nikount: toNikountView(nikountRow),
-    admin: { id: adminRow.id, label: adminRow.label },
+    admin: toAdminView(adminRow),
     participantToken,
     adminToken,
   };
+}
+
+export function toAdminView(row: repo.AdminAccessRow): AdminView {
+  return { id: row.id, label: row.label, participantId: row.participantId };
 }
 
 export async function getNikount(db: Database, nikountId: string): Promise<repo.NikountRow> {

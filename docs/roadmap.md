@@ -7,7 +7,7 @@
 | **0** Architecture ✅           | `docs/*`, décisions validées ([decisions.md](decisions.md))                                                                                                                                                                                                      | Terminée le 2026-11-08                                                                                                   |
 | **1** Socle 🟡                  | Monorepo pnpm, `apps/api` (Fastify, config Zod, logs, `/health`), `apps/web` (Vite, Tailwind, router, manifest PWA), `packages/core` + `contracts` vides, Drizzle + 1re migration, Docker Compose dev, ESLint/Prettier, TS strict, CI (lint + typecheck + tests) | `docker compose up` → front et `/api/v1/health` OK ; CI verte                                                            |
 | **2** Nikount + accès ✅        | `POST /nikounts`, tokens (génération, hash), plugin `auth`, `GET /me`, `/nikount` ; écrans `/`, `/new`, « Vos liens », accueil vide ; « Mes nikounts » local                                                                                                     | Tests : token inconnu → 401 ; participant ≠ admin ; création rate-limitée                                                |
-| **3** Participants              | CRUD admin, désactivation, choix d'identité déclarée côté participant                                                                                                                                                                                            | Tests : nom unique, isolation inter-nikount                                                                              |
+| **3** Participants ✅           | CRUD admin, désactivation, choix d'identité déclarée côté participant                                                                                                                                                                                            | Tests : nom unique, isolation inter-nikount                                                                              |
 | **4** Opérations + répartitions | `core/split.ts` **écrit en premier, test-first** ; tables `transaction`, `transaction_share`, `transaction_revision`, triggers ; `POST/GET /transactions` ; formulaire mobile avec prévisualisation                                                              | Tests de propriétés : Σ parts = montant pour tous modes ; trigger refuse une incohérence ; idempotence `clientRequestId` |
 | **5** Moteur comptable + soldes | `core/balances.ts`, `suggestions.ts`, `GET /balances`, écran soldes « à recevoir / à payer », « qui paie la prochaine »                                                                                                                                          | Σ soldes = 0 (propriété) ; SQL ≡ moteur ; exemples du cahier des charges reproduits                                      |
 | **6** Historique                | Liste groupée par jour, filtres, page détail (parts → montants), révisions                                                                                                                                                                                       | Opérations annulées/refusées visibles                                                                                    |
@@ -24,6 +24,13 @@
 > `/me`, `/nikount`, `/nikount/participant-link`, audit append-only, limites (créations par IP, tokens invalides par IP),
 > écrans `/`, `/new`, « Vos liens », `/n/:token`, `/a/:token`. 131 tests ; parcours vérifié dans le navigateur.
 > Reporté : bundle JS à alléger (668 Ko, surtout Zod et React Router) → Phase 11.
+
+> ✅ Phase 3 : table `participant` (unicité des noms actifs, FK composite admin ↔ participant), participants saisis à la
+> création (le créateur en tête s’il participe), `GET/POST/PATCH /participants` (désactivation au lieu de suppression,
+> verrouillage optimiste, audit, 200 max, figé si clôturé), règles d’état centralisées dans `@nikount/core` (`isActionAllowed`).
+> Front : saisie des participants à la création, « Qui êtes-vous ? » (identité déclarative mémorisée par appareil),
+> liste sur l’accueil, page de gestion admin. 182 tests ; parcours vérifié dans le navigateur (mobile).
+> Non fait (hors périmètre) : réordonner les participants dans l’interface (l’API accepte déjà `sortOrder`).
 
 ## Stratégie de tests
 

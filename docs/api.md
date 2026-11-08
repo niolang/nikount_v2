@@ -44,29 +44,29 @@ Légende rôle : **P** participant, **A** admin, **—** public.
 
 ### Public
 
-| Méthode | Route       | Rôle | Description                                                                                                                                                                                                                                                   |
-| ------- | ----------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/health`   | —    | Santé (inclut la connexion DB)                                                                                                                                                                                                                                |
-| POST    | `/nikounts` | —    | Crée un nikount. Corps : `name`, `currency?` (ISO 4217, `EUR` par défaut), `adminLabel`. Réponse **unique** contenant `participantToken` et `adminToken`. Limité à `RATE_LIMIT_CREATE_PER_HOUR` par IP. _(Phase 3 : `participants[]`, `adminIsParticipant?`)_ |
+| Méthode | Route       | Rôle | Description                                                                                                                                                                                                                                                                                                                                                 |
+| ------- | ----------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/health`   | —    | Santé (inclut la connexion DB)                                                                                                                                                                                                                                                                                                                              |
+| POST    | `/nikounts` | —    | Crée un nikount. Corps : `name`, `currency?` (ISO 4217, `EUR` par défaut), `adminLabel`, `adminIsParticipant?` (`true` par défaut : le créateur devient le premier participant), `participants[]` (≤ 100 noms, sans doublon, casse ignorée). Réponse **unique** contenant `participantToken` et `adminToken`. Limité à `RATE_LIMIT_CREATE_PER_HOUR` par IP. |
 
 ### Contexte
 
-| Méthode | Route                              | Rôle | Description                                                              |
-| ------- | ---------------------------------- | ---- | ------------------------------------------------------------------------ |
-| GET     | `/me`                              | P/A  | `{ role, admin?: { id, label }, nikount: {...} }` — appelé au chargement |
-| GET     | `/nikount`                         | P/A  | Nom, devise, état, compteurs (dont `pendingCount`)                       |
-| PATCH   | `/nikount`                         | A    | `name`, `timezone`, `version`                                            |
-| POST    | `/nikount/state`                   | A    | `{ to, reason?, version }` — transitions de [product.md §4](product.md)  |
-| POST    | `/nikount/participant-link/rotate` | A    | Invalide l'ancien lien participant, renvoie le nouveau token             |
-| GET     | `/nikount/participant-link`        | A    | Réaffiche le lien participant (token déchiffré, D17)                     |
+| Méthode | Route                              | Rôle | Description                                                                             |
+| ------- | ---------------------------------- | ---- | --------------------------------------------------------------------------------------- |
+| GET     | `/me`                              | P/A  | `{ role, admin?: { id, label, participantId }, nikount: {...} }` — appelé au chargement |
+| GET     | `/nikount`                         | P/A  | Nom, devise, état, compteurs (dont `pendingCount`)                                      |
+| PATCH   | `/nikount`                         | A    | `name`, `timezone`, `version`                                                           |
+| POST    | `/nikount/state`                   | A    | `{ to, reason?, version }` — transitions de [product.md §4](product.md)                 |
+| POST    | `/nikount/participant-link/rotate` | A    | Invalide l'ancien lien participant, renvoie le nouveau token                            |
+| GET     | `/nikount/participant-link`        | A    | Réaffiche le lien participant (token déchiffré, D17)                                    |
 
 ### Participants
 
-| Méthode | Route               | Rôle | Description                                 |
-| ------- | ------------------- | ---- | ------------------------------------------- |
-| GET     | `/participants`     | P/A  | Actifs + inactifs (flag)                    |
-| POST    | `/participants`     | A    | `{ name }`                                  |
-| PATCH   | `/participants/:id` | A    | `{ name?, isActive?, sortOrder?, version }` |
+| Méthode | Route               | Rôle | Description                                                                                                                                                                                                                     |
+| ------- | ------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/participants`     | P/A  | Actifs + inactifs (`isActive`), triés par `sortOrder`                                                                                                                                                                           |
+| POST    | `/participants`     | A    | `{ name }` → 201. `409 PARTICIPANT_NAME_TAKEN` (nom actif déjà pris), `409 PARTICIPANT_LIMIT_REACHED` (200 max), `409 INVALID_STATE` (clôturé)                                                                                  |
+| PATCH   | `/participants/:id` | A    | `{ name?, isActive?, sortOrder?, version }` (au moins un changement). Pas de suppression : désactivation. `404` hors de ce nikount, `409 VERSION_CONFLICT`, `409 PARTICIPANT_NAME_TAKEN` (renommage ou réactivation en doublon) |
 
 ### Admins
 

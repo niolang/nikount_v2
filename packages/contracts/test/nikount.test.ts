@@ -30,6 +30,8 @@ describe('CreateNikountRequest', () => {
       name: 'Weekend',
       adminLabel: 'Nicolas',
       currency: 'EUR',
+      adminIsParticipant: true,
+      participants: [],
     });
   });
 

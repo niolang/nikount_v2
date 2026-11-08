@@ -56,17 +56,17 @@ nikount 1───* participant
 Un lien admin = une ligne. Permet plusieurs admins, la révocation individuelle et l'attribution
 nominative des actions.
 
-| Colonne             | Type             | Notes                                                                                                                                     |
-| ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| id                  | uuid PK          |                                                                                                                                           |
-| nikount_id          | uuid FK          |                                                                                                                                           |
-| label               | text             | Nom affiché (« Nicolas »)                                                                                                                 |
-| participant_id      | uuid NULL        | _(ajouté en Phase 3 avec la table `participant`)_ FK composite ; lien optionnel vers un participant (un trésorier peut ne pas participer) |
-| token_hash          | bytea UNIQUE     | `sha256(token)`                                                                                                                           |
-| created_by_admin_id | uuid NULL        | NULL pour le créateur du nikount                                                                                                          |
-| revoked_at          | timestamptz NULL | Révoqué = refusé immédiatement                                                                                                            |
-| last_used_at        | timestamptz NULL | Mis à jour au plus 1×/min                                                                                                                 |
-| created_at          | timestamptz      |                                                                                                                                           |
+| Colonne             | Type             | Notes                                                                                                                  |
+| ------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| id                  | uuid PK          |                                                                                                                        |
+| nikount_id          | uuid FK          |                                                                                                                        |
+| label               | text             | Nom affiché (« Nicolas »)                                                                                              |
+| participant_id      | uuid NULL        | FK composite `(nikount_id, participant_id)` ; lien optionnel vers un participant (un trésorier peut ne pas participer) |
+| token_hash          | bytea UNIQUE     | `sha256(token)`                                                                                                        |
+| created_by_admin_id | uuid NULL        | NULL pour le créateur du nikount                                                                                       |
+| revoked_at          | timestamptz NULL | Révoqué = refusé immédiatement                                                                                         |
+| last_used_at        | timestamptz NULL | Mis à jour au plus 1×/min                                                                                              |
+| created_at          | timestamptz      |                                                                                                                        |
 
 Règle : il reste toujours **au moins un accès admin non révoqué** (on ne peut pas révoquer le dernier).
 

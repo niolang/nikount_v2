@@ -18,7 +18,7 @@ afterEach(() => {
 
 const created = {
   nikount: nikountView,
-  admin: { id: '0193f0aa-0000-7000-8000-000000000001', label: 'Nicolas' },
+  admin: { id: '0193f0aa-0000-7000-8000-000000000001', label: 'Nicolas', participantId: null },
   participantToken: PARTICIPANT_TOKEN,
   adminToken: ADMIN_TOKEN,
 };
@@ -50,6 +50,8 @@ describe('création d’un nikount', () => {
     expect(JSON.parse(init?.body as string)).toEqual({
       name: 'Weekend Chamonix',
       adminLabel: 'Nicolas',
+      adminIsParticipant: true,
+      participants: [],
     });
 
     const groupLink = screen.getByLabelText<HTMLInputElement>('Lien du groupe');
@@ -76,5 +78,38 @@ describe('création d’un nikount', () => {
     fillAndSubmit('Weekend', 'Nicolas');
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/Trop de créations/);
+  });
+
+  it('ajoute des participants, refuse les doublons et les envoie avec la création', async () => {
+    const fetchMock = mockApi({ '/api/v1/nikounts': () => ({ status: 201, body: created }) });
+    renderAt('/new');
+
+    fireEvent.change(screen.getByLabelText('Nom de l’événement'), { target: { value: 'Weekend' } });
+    fireEvent.change(screen.getByLabelText('Votre prénom'), { target: { value: 'Nicolas' } });
+    const input = screen.getByLabelText('Participants');
+    for (const name of ['Alice', ' Bob ']) {
+      fireEvent.change(input, { target: { value: name } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+    }
+    // Doublon avec un participant, puis avec le créateur qui participe.
+    fireEvent.change(input, { target: { value: 'alice' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter ce participant' }));
+    expect(screen.getByText('« alice » est déjà dans la liste.')).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'NICOLAS' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByText('« NICOLAS » est déjà dans la liste.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer Alice' }));
+    fireEvent.click(screen.getByLabelText('Je participe aussi aux dépenses'));
+    fireEvent.click(screen.getByRole('button', { name: 'Créer le nikount' }));
+
+    expect(await screen.findByText(/est prêt/)).toBeTruthy();
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(init?.body as string)).toEqual({
+      name: 'Weekend',
+      adminLabel: 'Nicolas',
+      adminIsParticipant: false,
+      participants: ['Bob'],
+    });
   });
 });

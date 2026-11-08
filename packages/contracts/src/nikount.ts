@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AccessRole, NikountState } from './enums.js';
+import { ParticipantName, participantNameKey } from './participant.js';
 import { cleanText } from './text.js';
 import { ADMIN_TOKEN_PATTERN, PARTICIPANT_TOKEN_PATTERN } from './tokens.js';
 
@@ -17,12 +18,34 @@ export const AdminToken = z.string().regex(ADMIN_TOKEN_PATTERN);
 
 // --- Requêtes -------------------------------------------------------------
 
-export const CreateNikountRequest = z.strictObject({
-  name: NikountName,
-  currency: CurrencyCode.default('EUR'),
-  /** Nom de l'admin créateur, affiché dans « Validée par … ». */
-  adminLabel: PersonLabel,
-});
+/** Participants saisis à la création (le créateur s'y ajoute s'il participe). */
+const MAX_INITIAL_PARTICIPANTS = 100;
+
+export const CreateNikountRequest = z
+  .strictObject({
+    name: NikountName,
+    currency: CurrencyCode.default('EUR'),
+    /** Nom de l'admin créateur, affiché dans « Validée par … ». */
+    adminLabel: PersonLabel,
+    /** Le créateur participe-t-il aux dépenses ? Si oui, il devient aussi participant. */
+    adminIsParticipant: z.boolean().default(true),
+    participants: z.array(ParticipantName).max(MAX_INITIAL_PARTICIPANTS).default([]),
+  })
+  .superRefine((body, ctx) => {
+    const seen = new Set<string>();
+    if (body.adminIsParticipant) seen.add(participantNameKey(body.adminLabel));
+    body.participants.forEach((name, index) => {
+      const key = participantNameKey(name);
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['participants', index],
+          message: `Nom en double : ${name}`,
+        });
+      }
+      seen.add(key);
+    });
+  });
 export type CreateNikountRequest = z.input<typeof CreateNikountRequest>;
 
 // --- Réponses -------------------------------------------------------------
@@ -40,6 +63,8 @@ export type NikountView = z.infer<typeof NikountView>;
 export const AdminView = z.object({
   id: z.uuid(),
   label: z.string(),
+  /** Participant que représente cet admin, s'il participe aux dépenses. */
+  participantId: z.uuid().nullable(),
 });
 export type AdminView = z.infer<typeof AdminView>;
 

@@ -51,7 +51,7 @@ export const protectedNikountRoutes: FastifyPluginAsyncZod<NikountRoutesOptions>
       : null;
     return {
       role: access.role,
-      admin: admin ? { id: admin.id, label: admin.label } : null,
+      admin: admin ? service.toAdminView(admin) : null,
       nikount: service.toNikountView(nikount),
     };
   });

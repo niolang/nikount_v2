@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { isDatabaseUp } from '../src/db/client.js';
-import { auditEvent, nikount } from '../src/db/schema.js';
+import { adminAccess, auditEvent, nikount, participant } from '../src/db/schema.js';
 import { createTestDatabase, type TestDatabase } from './helpers.js';
 
 let testDb: TestDatabase;
@@ -108,5 +108,58 @@ describe('journal d’audit append-only', () => {
         .insert(auditEvent)
         .values({ nikountId: values.id, actorKind: 'ADMIN', action: 'x.y' }),
     ).rejects.toThrow();
+  });
+});
+
+describe('participants : garanties en base', () => {
+  async function seedNikount() {
+    const values = newNikount();
+    await testDb.db.insert(nikount).values(values);
+    return values.id;
+  }
+
+  it('refuse deux participants actifs du même nom (casse ignorée), accepte si l’un est inactif', async () => {
+    const nikountId = await seedNikount();
+    await testDb.db
+      .insert(participant)
+      .values({ id: randomUUID(), nikountId, name: 'Alice', sortOrder: 0 });
+    await expectDatabaseError(
+      testDb.db
+        .insert(participant)
+        .values({ id: randomUUID(), nikountId, name: 'ALICE', sortOrder: 1 }),
+      /participant_active_name_unique/,
+    );
+    await testDb.db
+      .insert(participant)
+      .values({ id: randomUUID(), nikountId, name: 'alice', sortOrder: 2, isActive: false });
+  });
+
+  it('autorise le même nom dans deux nikounts différents', async () => {
+    const a = await seedNikount();
+    const b = await seedNikount();
+    await testDb.db.insert(participant).values([
+      { id: randomUUID(), nikountId: a, name: 'Bob', sortOrder: 0 },
+      { id: randomUUID(), nikountId: b, name: 'Bob', sortOrder: 0 },
+    ]);
+  });
+
+  it('interdit de lier un admin à un participant d’un AUTRE nikount (clé composite)', async () => {
+    const a = await seedNikount();
+    const b = await seedNikount();
+    const bobOfB = randomUUID();
+    await testDb.db
+      .insert(participant)
+      .values({ id: bobOfB, nikountId: b, name: 'Bob', sortOrder: 0 });
+
+    await expectDatabaseError(
+      testDb.db.insert(adminAccess).values({
+        id: randomUUID(),
+        nikountId: a,
+        label: 'Admin A',
+        participantId: bobOfB,
+        tokenHash: tokenHash(),
+      }),
+      /admin_access_participant_same_nikount_fk/,
+    );
   });
 });

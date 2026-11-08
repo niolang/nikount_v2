@@ -4,3 +4,4 @@
  * Voir docs/product.md §5–7.
  */
 export * from './money.js';
+export * from './rules.js';

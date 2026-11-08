@@ -65,7 +65,7 @@ export async function createNikountViaApi(
   }
   return response.json<{
     nikount: { name: string; currency: string; state: string };
-    admin: { id: string; label: string };
+    admin: { id: string; label: string; participantId: string | null };
     participantToken: string;
     adminToken: string;
   }>();

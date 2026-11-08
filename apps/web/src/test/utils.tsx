@@ -39,7 +39,34 @@ export const nikountView = {
   createdAt: '2026-11-08T10:00:00.000Z',
 };
 
-export const errorBody = (code: string) => ({
-  error: { code, message: code },
+export const errorBody = (code: string, message = code) => ({
+  error: { code, message },
   requestId: 'req-1',
 });
+
+const person = (n: number, name: string, isActive = true) => ({
+  id: `0193f0aa-0000-7000-8000-00000000010${String(n)}`,
+  name,
+  isActive,
+  sortOrder: n,
+  version: 1,
+});
+
+export const people = {
+  nicolas: person(0, 'Nicolas'),
+  alice: person(1, 'Alice'),
+  bob: person(2, 'Bob'),
+  ancien: person(3, 'Ancien', false),
+};
+
+export const participantList = { participants: Object.values(people) };
+
+export const ADMIN_ID = '0193f0aa-0000-7000-8000-000000000001';
+
+export const adminMe = {
+  role: 'ADMIN',
+  admin: { id: ADMIN_ID, label: 'Nicolas', participantId: people.nicolas.id },
+  nikount: nikountView,
+};
+
+export const participantMe = { role: 'PARTICIPANT', admin: null, nikount: nikountView };
