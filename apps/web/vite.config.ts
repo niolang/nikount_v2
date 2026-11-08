@@ -24,7 +24,7 @@ function productionHeaders(): Record<string, string> {
   return headers;
 }
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ command, mode, isPreview }) => {
   const env = command === 'serve' ? loadEnv(mode, envDir, 'VITE_') : {};
   const apiTarget = env['VITE_API_PROXY_TARGET'] ?? 'http://localhost:3000';
 
@@ -43,7 +43,8 @@ export default defineConfig(({ command, mode }) => {
       watch: { usePolling: process.env['CHOKIDAR_USEPOLLING'] === 'true' },
       proxy: { '/api': { target: apiTarget, changeOrigin: false } },
     },
-    preview: { port: 4180, headers: productionHeaders() },
+    // Lu seulement pour `vite preview` : l'image Docker du front ne contient pas le Caddyfile.
+    preview: { port: 4180, headers: isPreview ? productionHeaders() : {} },
     build: {
       sourcemap: true,
       target: 'es2022',
