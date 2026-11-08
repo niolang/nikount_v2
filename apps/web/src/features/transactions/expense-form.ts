@@ -6,7 +6,7 @@ import {
   type ComputedShare,
   type MinorUnits,
 } from '@nikount/core';
-import { formatMoney } from '../../lib/format';
+import { formatMoney, toAmountInput } from '../../lib/format';
 
 /*
  * Logique pure du formulaire de dépense : lecture des saisies, construction de la répartition
@@ -101,4 +101,24 @@ export function previewSplit(
       return { status: 'error', message: splitErrorMessage(error, currency) };
     throw error;
   }
+}
+
+/** Brouillon de répartition reprenant une opération existante (modification). */
+export function draftFromShares(
+  mode: DistributionMode,
+  shares: { participantId: string; inputValue: number }[],
+): { concerned: Set<string>; values: Record<string, string> } {
+  const decimal = (value: number) => String(value).replace('.', ',');
+  return {
+    concerned: new Set(shares.map((s) => s.participantId)),
+    values:
+      mode === 'EQUAL'
+        ? {}
+        : Object.fromEntries(
+            shares.map((s) => [
+              s.participantId,
+              mode === 'AMOUNT' ? toAmountInput(s.inputValue) : decimal(s.inputValue),
+            ]),
+          ),
+  };
 }

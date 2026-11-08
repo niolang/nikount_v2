@@ -72,20 +72,19 @@ export function MenuPage({
       ) : null}
 
       {isAdmin ? (
-        <Link
-          to={`${basePath}/settings`}
-          className="mt-4 flex items-center justify-between rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
-        >
-          <span>
-            <span className="block font-bold">⚙️ Gestion du nikount</span>
-            <span className="mt-1 block text-sm text-slate-600">
-              Terminer, clôturer, renommer, administrateurs
-            </span>
-          </span>
-          <span aria-hidden="true" className="text-xl text-slate-400">
-            ›
-          </span>
-        </Link>
+        <>
+          <MenuLink
+            to={`${basePath}/settings`}
+            title="⚙️ Gestion du nikount"
+            text="Terminer, clôturer, renommer, administrateurs"
+          />
+          <MenuLink
+            to={`${basePath}/operations`}
+            title="📋 Toutes les opérations"
+            text="Recherche, filtres, actions en masse (plus confortable sur ordinateur)"
+          />
+          <MenuLink to={`${basePath}/audit`} title="🕓 Journal" text="Qui a fait quoi, et quand" />
+        </>
       ) : null}
 
       <Link to="/" className="mt-6 text-center text-sm font-semibold text-brand-700">
@@ -169,5 +168,22 @@ function InviteCard({
         Le lien a trop circulé ? Le changer
       </Link>
     </Card>
+  );
+}
+
+function MenuLink({ to, title, text }: { to: string; title: string; text: string }) {
+  return (
+    <Link
+      to={to}
+      className="mt-4 flex items-center justify-between rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+    >
+      <span>
+        <span className="block font-bold">{title}</span>
+        <span className="mt-1 block text-sm text-slate-600">{text}</span>
+      </span>
+      <span aria-hidden="true" className="text-xl text-slate-400">
+        ›
+      </span>
+    </Link>
   );
 }

@@ -1,19 +1,14 @@
 import { useMemo, useState, type SyntheticEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import type { MeResponse, ParticipantView } from '@nikount/contracts';
+import type { MeResponse, ParticipantView, TransactionView } from '@nikount/contracts';
 import { isActionAllowed, MAX_TRANSACTION_AMOUNT, parseAmountInput } from '@nikount/core';
 import { ApiError } from '../../api/client';
 import { useParticipants } from '../../api/participants';
-import { useCreateTransaction } from '../../api/transactions';
+import { useCreateTransaction, useUpdateTransaction } from '../../api/transactions';
 import { Button, PageShell, TextField } from '../../components/ui';
 import { todayIn } from '../../lib/dates';
-import { formatMoney } from '../../lib/format';
+import { formatMoney, toAmountInput } from '../../lib/format';
 import { useCurrentParticipant } from '../nikount/useCurrentParticipant';
-
-/** Montant en centimes → texte saisissable (« 3000 » → « 30,00 »). */
-function toInputText(minor: number): string {
-  return (minor / 100).toFixed(2).replace('.', ',');
-}
 
 /**
  * Pré-remplissage depuis un virement suggéré : `?from=<id>&to=<id>&amount=<centimes>`.
@@ -72,35 +67,58 @@ function BackLink({ name }: { name: string }) {
   );
 }
 
-function ReimbursementForm({
+/**
+ * Formulaire de remboursement. Sans `existing` : création (page complète). Avec : modification
+ * par un admin (formulaire seul, à placer dans une page ou un panneau).
+ */
+export function ReimbursementForm({
   token,
   me,
   participants,
+  existing,
+  onSaved,
 }: {
   token: string;
   me: MeResponse;
   participants: ParticipantView[];
+  existing?: TransactionView;
+  onSaved?: (transaction: TransactionView) => void;
 }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const currency = me.nikount.currency;
-  const active = useMemo(() => participants.filter((p) => p.isActive), [participants]);
+  const existingTo = existing?.shares[0]?.participantId;
+  // En modification, les deux personnes d'origine restent proposées même désactivées.
+  const active = useMemo(
+    () =>
+      participants.filter((p) => p.isActive || p.id === existing?.payerId || p.id === existingTo),
+    [participants, existing, existingTo],
+  );
   const { current } = useCurrentParticipant(token, me, participants);
   const create = useCreateTransaction(token);
+  const update = useUpdateTransaction(token);
+  const mutation = existing ? update : create;
 
   const prefill = readPrefill(params, new Set(active.map((p) => p.id)));
-  const defaultFrom = prefill.from ?? current?.id ?? active[0]?.id ?? '';
-  const defaultTo = prefill.to ?? active.find((p) => p.id !== defaultFrom)?.id ?? '';
+  const defaultFrom = existing?.payerId ?? prefill.from ?? current?.id ?? active[0]?.id ?? '';
+  const defaultTo = existingTo ?? prefill.to ?? active.find((p) => p.id !== defaultFrom)?.id ?? '';
 
   // Généré une fois à l'ouverture : un double envoi ne crée qu'un remboursement (idempotence).
   const [clientRequestId] = useState(() => crypto.randomUUID());
   const [fromId, setFromId] = useState(defaultFrom);
   const [toId, setToId] = useState(defaultTo);
   const [amountText, setAmountText] = useState(
-    prefill.amount !== null ? toInputText(prefill.amount) : '',
+    existing
+      ? toAmountInput(existing.amount)
+      : prefill.amount !== null
+        ? toAmountInput(prefill.amount)
+        : '',
   );
-  const [description, setDescription] = useState('Remboursement');
-  const [occurredOn, setOccurredOn] = useState(() => todayIn(me.nikount.timezone));
+  const [description, setDescription] = useState(existing?.description ?? 'Remboursement');
+  const [occurredOn, setOccurredOn] = useState(
+    () => existing?.occurredOn ?? todayIn(me.nikount.timezone),
+  );
+  const [reason, setReason] = useState('');
   const [showErrors, setShowErrors] = useState(false);
 
   const amount = parseAmountInput(amountText);
@@ -113,6 +131,26 @@ function ReimbursementForm({
     event.preventDefault();
     setShowErrors(true);
     if (!amountValid || samePerson || !fromId || !toId || !descriptionValid) return;
+
+    if (existing) {
+      update.mutate(
+        {
+          id: existing.id,
+          body: {
+            amount,
+            description,
+            category: null,
+            occurredOn,
+            payerId: fromId,
+            distribution: { mode: 'EQUAL', participantIds: [toId] },
+            version: existing.version,
+            ...(reason.trim() ? { reason: reason.trim() } : {}),
+          },
+        },
+        { onSuccess: (transaction) => onSaved?.(transaction) },
+      );
+      return;
+    }
 
     create.mutate(
       {
@@ -142,9 +180,9 @@ function ReimbursementForm({
   }
 
   const apiError =
-    create.error instanceof ApiError
-      ? create.error.message
-      : create.error
+    mutation.error instanceof ApiError
+      ? mutation.error.message
+      : mutation.error
         ? 'L’envoi a échoué. Vérifiez votre connexion et réessayez.'
         : null;
 
@@ -159,6 +197,121 @@ function ReimbursementForm({
     );
   }
 
+  const form = (
+    <form onSubmit={submit} noValidate className="mt-6 flex flex-1 flex-col gap-5">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+        <PersonSelect
+          id="from"
+          label="Qui rembourse ?"
+          value={fromId}
+          onChange={setFromId}
+          participants={active}
+          currentId={current?.id ?? null}
+        />
+        <span className="pb-3 text-xl text-slate-400" aria-hidden="true">
+          →
+        </span>
+        <PersonSelect
+          id="to"
+          label="À qui ?"
+          value={toId}
+          onChange={setToId}
+          participants={active}
+          currentId={current?.id ?? null}
+        />
+      </div>
+      {samePerson ? (
+        <p className="-mt-3 text-sm text-red-600">On ne se rembourse pas soi-même.</p>
+      ) : null}
+
+      <div>
+        <label htmlFor="amount" className="block text-sm font-semibold text-slate-700">
+          Montant
+        </label>
+        <div className="mt-1.5 flex items-center rounded-xl bg-white px-4 ring-1 ring-slate-300 ring-inset focus-within:ring-2 focus-within:ring-brand-700">
+          <input
+            id="amount"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0,00"
+            value={amountText}
+            onChange={(event) => {
+              setAmountText(event.target.value);
+            }}
+            aria-invalid={showErrors && !amountValid ? true : undefined}
+            className="tabular min-h-16 w-full border-0 bg-transparent text-3xl font-bold focus:ring-0 focus:outline-none"
+          />
+          <span className="text-2xl font-bold text-slate-400">€</span>
+        </div>
+        {showErrors && !amountValid ? (
+          <p className="mt-1 text-sm text-red-600">Montant positif, 2 décimales au plus.</p>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <TextField
+          label="Libellé"
+          value={description}
+          maxLength={80}
+          onChange={(event) => {
+            setDescription(event.target.value);
+          }}
+          {...(showErrors && !descriptionValid ? { error: 'Libellé requis.' } : {})}
+        />
+        <div className="space-y-1.5">
+          <label htmlFor="date" className="block text-sm font-semibold text-slate-700">
+            Date
+          </label>
+          <input
+            id="date"
+            type="date"
+            value={occurredOn}
+            required
+            onChange={(event) => {
+              setOccurredOn(event.target.value);
+            }}
+            className="block min-h-12 w-full rounded-xl border-0 bg-white px-3 ring-1 ring-slate-300 ring-inset"
+          />
+        </div>
+      </div>
+
+      {amountValid && !samePerson && fromId && toId ? (
+        <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800" role="status">
+          {name(fromId)} rembourse {formatMoney(amount, currency)} à {name(toId)} : {name(toId)}{' '}
+          aura {formatMoney(amount, currency)} de moins à recevoir.
+        </p>
+      ) : null}
+
+      {existing ? (
+        <TextField
+          label="Motif de la modification (facultatif)"
+          value={reason}
+          maxLength={200}
+          onChange={(event) => {
+            setReason(event.target.value);
+          }}
+        />
+      ) : null}
+
+      {apiError ? (
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          {apiError}
+        </p>
+      ) : null}
+
+      <div className="sticky bottom-0 mt-auto bg-slate-50 pt-2 pb-[env(safe-area-inset-bottom)]">
+        <Button type="submit" className="w-full" disabled={mutation.isPending}>
+          {mutation.isPending
+            ? 'Envoi…'
+            : existing
+              ? 'Enregistrer les modifications'
+              : 'Enregistrer le remboursement'}
+        </Button>
+      </div>
+    </form>
+  );
+
+  if (existing) return form;
   return (
     <PageShell>
       <BackLink name={me.nikount.name} />
@@ -166,103 +319,7 @@ function ReimbursementForm({
       <p className="mt-1 text-sm text-slate-600">
         Enregistrez un virement, une remise d’espèces… entre deux participants.
       </p>
-
-      <form onSubmit={submit} noValidate className="mt-6 flex flex-1 flex-col gap-5">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-          <PersonSelect
-            id="from"
-            label="Qui rembourse ?"
-            value={fromId}
-            onChange={setFromId}
-            participants={active}
-            currentId={current?.id ?? null}
-          />
-          <span className="pb-3 text-xl text-slate-400" aria-hidden="true">
-            →
-          </span>
-          <PersonSelect
-            id="to"
-            label="À qui ?"
-            value={toId}
-            onChange={setToId}
-            participants={active}
-            currentId={current?.id ?? null}
-          />
-        </div>
-        {samePerson ? (
-          <p className="-mt-3 text-sm text-red-600">On ne se rembourse pas soi-même.</p>
-        ) : null}
-
-        <div>
-          <label htmlFor="amount" className="block text-sm font-semibold text-slate-700">
-            Montant
-          </label>
-          <div className="mt-1.5 flex items-center rounded-xl bg-white px-4 ring-1 ring-slate-300 ring-inset focus-within:ring-2 focus-within:ring-brand-700">
-            <input
-              id="amount"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="0,00"
-              value={amountText}
-              onChange={(event) => {
-                setAmountText(event.target.value);
-              }}
-              aria-invalid={showErrors && !amountValid ? true : undefined}
-              className="tabular min-h-16 w-full border-0 bg-transparent text-3xl font-bold focus:ring-0 focus:outline-none"
-            />
-            <span className="text-2xl font-bold text-slate-400">€</span>
-          </div>
-          {showErrors && !amountValid ? (
-            <p className="mt-1 text-sm text-red-600">Montant positif, 2 décimales au plus.</p>
-          ) : null}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label="Libellé"
-            value={description}
-            maxLength={80}
-            onChange={(event) => {
-              setDescription(event.target.value);
-            }}
-            {...(showErrors && !descriptionValid ? { error: 'Libellé requis.' } : {})}
-          />
-          <div className="space-y-1.5">
-            <label htmlFor="date" className="block text-sm font-semibold text-slate-700">
-              Date
-            </label>
-            <input
-              id="date"
-              type="date"
-              value={occurredOn}
-              required
-              onChange={(event) => {
-                setOccurredOn(event.target.value);
-              }}
-              className="block min-h-12 w-full rounded-xl border-0 bg-white px-3 ring-1 ring-slate-300 ring-inset"
-            />
-          </div>
-        </div>
-
-        {amountValid && !samePerson && fromId && toId ? (
-          <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800" role="status">
-            {name(fromId)} rembourse {formatMoney(amount, currency)} à {name(toId)} : {name(toId)}{' '}
-            aura {formatMoney(amount, currency)} de moins à recevoir.
-          </p>
-        ) : null}
-
-        {apiError ? (
-          <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
-            {apiError}
-          </p>
-        ) : null}
-
-        <div className="sticky bottom-0 mt-auto bg-slate-50 pt-2 pb-[env(safe-area-inset-bottom)]">
-          <Button type="submit" className="w-full" disabled={create.isPending}>
-            {create.isPending ? 'Envoi…' : 'Enregistrer le remboursement'}
-          </Button>
-        </div>
-      </form>
+      {form}
     </PageShell>
   );
 }
@@ -299,6 +356,7 @@ function PersonSelect({
           <option key={p.id} value={p.id}>
             {p.name}
             {p.id === currentId ? ' (moi)' : ''}
+            {p.isActive ? '' : ' (désactivé)'}
           </option>
         ))}
       </select>

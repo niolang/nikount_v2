@@ -14,7 +14,7 @@
 | **7** Validation ✅                | Statuts, validate/reject/cancel, bulk tout-ou-rien, bannière « N à valider », audit                                                                                                                                                                              | Matrice de transitions testée exhaustivement ; PENDING sans effet sur soldes                                             |
 | **8** Remboursements ✅            | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
 | **9** Cycle de vie ✅              | OPEN/SETTLEMENT/CLOSED, réouverture motivée, badge d'état, rotation du lien participant, gestion des admins                                                                                                                                                      | Matrice état × action testée ; clôture refusée si PENDING                                                                |
-| **10** Admin desktop               | Layout `lg`, table dense (filtres, recherche, tri, sélection multiple), édition inline + panneau, audit, paramètres                                                                                                                                              | Parcours trésorier complet sur desktop                                                                                   |
+| **10** Admin desktop ✅            | Layout `lg`, table dense (filtres, recherche, tri, sélection multiple), édition inline + panneau, audit, paramètres                                                                                                                                              | Parcours trésorier complet sur desktop                                                                                   |
 | **11** Durcissement                | Tests API d'isolation sur toutes les routes, en-têtes/CSP, rate limits, Playwright mobile (parcours clés), accessibilité, perf, `docker-compose.prod.yml`, sauvegardes, doc d'exploitation                                                                       | Revue sécurité OK ; Lighthouse mobile ≥ 90                                                                               |
 
 > 🟡 Phase 1 : tout est vérifié localement (lint, types, 50 tests, build, migrations, API + front lancés) sauf `docker compose up` lui-même
@@ -76,6 +76,17 @@
 > ne sont pas soldés, nom, nouveau lien du groupe, admins avec lien affiché une seule fois), entrées depuis le menu et
 > l’accueil (« Tout est soldé : clôturer »), message sur un nikount clôturé. 490 tests ; vérifié dans le navigateur.
 > Non fait : test de concurrence réelle de la clôture (PGlite n’a qu’une connexion) → Phase 11.
+
+> ✅ Phase 10 : modification d’une opération par un admin (`PUT /transactions/:id`, D13 : en place avec révision,
+> statut inchangé, verrouillage optimiste, `NOT_EDITABLE` pour une opération refusée ou annulée, participants
+> désactivés acceptés s’ils figuraient déjà dans l’opération, audit `transaction.updated` avec avant/après) et
+> journal d’audit (`GET /audit`, curseur, filtres par famille ou action exacte). Front : barre latérale admin à
+> partir de `lg` (même SPA, D T5), table « Opérations » (recherche sans accents, filtres type/statut/payeur/
+> concerné/catégorie/dates, tri par colonne, sélection multiple et actions en masse, édition en ligne de la
+> description, de la date et de la catégorie, panneau latéral détail + modification complète), écran « Journal »,
+> page de modification sur mobile depuis le détail. Filtres et tri faits côté navigateur sur la liste complète
+> (< 1 000 opérations par nikount) : pas de paramètres de requête sur `GET /transactions`. 547 tests ; vérifié dans
+> le navigateur (desktop et mobile). Bundle à 825 Ko (découpage prévu en Phase 11).
 
 ## Stratégie de tests
 

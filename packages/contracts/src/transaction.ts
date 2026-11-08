@@ -169,3 +169,21 @@ export const BulkStatusRequest = z.strictObject({
   reason: Reason.optional(),
 });
 export type BulkStatusRequest = z.input<typeof BulkStatusRequest>;
+
+// --- Modification (admin, docs/product.md §9 et D13) -----------------------------------------
+
+/**
+ * Remplacement complet d'une opération : tout ce qui se saisit, sauf le type. Le statut ne change
+ * pas. `version` est obligatoire (verrouillage optimiste) ; `reason` est gardé dans la révision.
+ */
+export const UpdateTransactionRequest = z.strictObject({
+  amount: MinorAmount,
+  description: cleanText(1, 80),
+  category: TransactionCategory.nullable(),
+  occurredOn: OccurredOn,
+  payerId: z.uuid(),
+  distribution: DistributionRequest,
+  version: z.number().int().min(1),
+  reason: Reason.optional(),
+});
+export type UpdateTransactionRequest = z.input<typeof UpdateTransactionRequest>;

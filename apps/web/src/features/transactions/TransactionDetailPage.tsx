@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router';
+import { isActionAllowed } from '@nikount/core';
 import type {
   DistributionMode,
   MeResponse,
@@ -14,6 +15,7 @@ import { CATEGORIES, transactionEmoji } from '../../lib/categories';
 import { dayLabel } from '../../lib/history';
 import { formatDateTime, todayIn } from '../../lib/dates';
 import { formatMoney } from '../../lib/format';
+import { isEditable } from '../../lib/operations';
 
 const MODE_LABELS: Record<DistributionMode, string> = {
   EQUAL: 'Égalitaire',
@@ -48,16 +50,45 @@ export function TransactionDetailPage({
   basePath: string;
 }) {
   const { transactionId = '' } = useParams();
+  return (
+    <PageShell>
+      <Link to={`${basePath}/history`} className="self-start text-sm font-semibold text-brand-700">
+        ← Historique
+      </Link>
+      <TransactionDetail
+        token={token}
+        me={me}
+        transactionId={transactionId}
+        editPath={`${basePath}/tx/${transactionId}/edit`}
+      />
+    </PageShell>
+  );
+}
+
+/**
+ * Contenu du détail, utilisé par la page et par le panneau latéral de la table desktop.
+ * « Modifier » (admin) mène à `editPath` ou appelle `onEdit`.
+ */
+export function TransactionDetail({
+  token,
+  me,
+  transactionId,
+  editPath,
+  onEdit,
+}: {
+  token: string;
+  me: MeResponse;
+  transactionId: string;
+  editPath?: string;
+  onEdit?: () => void;
+}) {
   const transaction = useTransaction(token, transactionId);
   const revisions = useTransactionRevisions(token, transactionId);
   const participants = useParticipants(token);
   const names = new Map((participants.data ?? []).map((p) => [p.id, p.name]));
 
   return (
-    <PageShell>
-      <Link to={`${basePath}/history`} className="self-start text-sm font-semibold text-brand-700">
-        ← Historique
-      </Link>
+    <>
       {transaction.data ? (
         <Detail
           token={token}
@@ -65,6 +96,8 @@ export function TransactionDetailPage({
           revisions={revisions.data ?? []}
           names={names}
           me={me}
+          editPath={editPath}
+          onEdit={onEdit}
         />
       ) : transaction.error ? (
         <p className="mt-10 text-center text-slate-600">
@@ -77,7 +110,7 @@ export function TransactionDetailPage({
           Chargement…
         </p>
       )}
-    </PageShell>
+    </>
   );
 }
 
@@ -87,12 +120,16 @@ function Detail({
   revisions,
   names,
   me,
+  editPath,
+  onEdit,
 }: {
   token: string;
   transaction: TransactionView;
   revisions: TransactionRevisionView[];
   names: Map<string, string>;
   me: MeResponse;
+  editPath?: string | undefined;
+  onEdit?: (() => void) | undefined;
 }) {
   const { currency, timezone } = me.nikount;
   const name = (id: string | null) => (id ? (names.get(id) ?? '?') : '?');
@@ -125,6 +162,26 @@ function Detail({
       <StatusPanel transaction={t} when={when} />
       {me.role === 'ADMIN' ? (
         <StatusActions adminToken={token} transaction={t} state={me.nikount.state} />
+      ) : null}
+      {me.role === 'ADMIN' &&
+      isEditable(t) &&
+      isActionAllowed('EDIT_OR_CANCEL', me.nikount.state) ? (
+        onEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="mt-3 w-full rounded-2xl py-2.5 text-sm font-semibold text-brand-700 ring-1 ring-brand-700/30 hover:bg-brand-50"
+          >
+            ✏️ Modifier
+          </button>
+        ) : editPath ? (
+          <Link
+            to={editPath}
+            className="mt-3 block rounded-2xl py-2.5 text-center text-sm font-semibold text-brand-700 ring-1 ring-brand-700/30 hover:bg-brand-50"
+          >
+            ✏️ Modifier
+          </Link>
+        ) : null
       ) : null}
 
       <Card className="mt-4">

@@ -7,6 +7,7 @@ import {
   TransactionListResponse,
   TransactionRevisionListResponse,
   TransactionView,
+  UpdateTransactionRequest,
 } from '@nikount/contracts';
 import type { StatusAction } from '@nikount/core';
 import { getAccess, requireAdmin } from '../../auth/access.js';
@@ -62,6 +63,21 @@ export const transactionRoutes: FastifyPluginAsyncZod<TransactionRoutesOptions> 
       // 201 : créée ; 200 : renvoi d'une saisie déjà enregistrée (idempotence).
       return reply.code(created ? 201 : 200).send(transaction);
     },
+  );
+
+  app.put(
+    '/transactions/:id',
+    {
+      schema: {
+        params: TransactionIdParams,
+        body: UpdateTransactionRequest,
+        response: { 200: TransactionView },
+      },
+    },
+    async (request) =>
+      service.updateTransaction(db, requireAdmin(request), request.params.id, request.body, {
+        requestId: request.id,
+      }),
   );
 
   // --- Changements de statut (admins uniquement) ---------------------------------------------

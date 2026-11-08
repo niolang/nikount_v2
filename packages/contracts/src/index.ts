@@ -10,3 +10,4 @@ export * from './participant.js';
 export * from './nikount.js';
 export * from './transaction.js';
 export * from './balances.js';
+export * from './audit.js';

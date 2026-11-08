@@ -6,7 +6,10 @@ import { useMe } from '../../api/nikount';
 import { PageShell } from '../../components/ui';
 import { nikountPath } from '../../lib/links';
 import { forgetNikount, rememberNikount } from '../../lib/recent-nikounts';
+import { AuditPage } from '../audit/AuditPage';
+import { OperationsPage } from '../operations/OperationsPage';
 import { ReviewPage } from '../review/ReviewPage';
+import { EditTransactionPage } from '../transactions/EditTransaction';
 import { ExpenseFormPage } from '../transactions/ExpenseFormPage';
 import { HistoryPage } from '../transactions/HistoryPage';
 import { ReimbursementFormPage } from '../transactions/ReimbursementFormPage';
@@ -66,42 +69,41 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
   // Chemins absolus : les liens fonctionnent depuis n'importe quel écran du nikount.
   const basePath = nikountPath(me.role, token);
   const props = { token, me, basePath };
-  const withNav = (page: ReactNode) => <NikountLayout basePath={basePath}>{page}</NikountLayout>;
+  const layout = (page: ReactNode, mobileNav = true) => (
+    <NikountLayout token={token} me={me} basePath={basePath} mobileNav={mobileNav}>
+      {page}
+    </NikountLayout>
+  );
+  // Écrans de gestion : réservés aux admins (le serveur le vérifie aussi), sans navigation basse.
+  const adminOnly = (page: ReactNode, mobileNav = false) =>
+    me.role === 'ADMIN' ? layout(page, mobileNav) : <Navigate to={basePath} replace />;
 
   return (
     <Routes>
-      <Route index element={withNav(<NikountHome {...props} />)} />
-      <Route path="history" element={withNav(<HistoryPage {...props} />)} />
-      <Route path="menu" element={withNav(<MenuPage {...props} />)} />
-      <Route path="tx/:transactionId" element={withNav(<TransactionDetailPage {...props} />)} />
-      <Route path="expenses/new" element={<ExpenseFormPage token={token} me={me} />} />
-      <Route path="reimbursements/new" element={<ReimbursementFormPage token={token} me={me} />} />
+      <Route index element={layout(<NikountHome {...props} />)} />
+      <Route path="history" element={layout(<HistoryPage {...props} />)} />
+      <Route path="menu" element={layout(<MenuPage {...props} />)} />
+      <Route path="tx/:transactionId" element={layout(<TransactionDetailPage {...props} />)} />
       <Route
-        path="review"
-        element={
-          me.role === 'ADMIN' ? (
-            withNav(<ReviewPage {...props} />)
-          ) : (
-            <Navigate to={basePath} replace />
-          )
-        }
+        path="tx/:transactionId/edit"
+        element={adminOnly(<EditTransactionPage {...props} />)}
       />
+      <Route
+        path="expenses/new"
+        element={layout(<ExpenseFormPage token={token} me={me} />, false)}
+      />
+      <Route
+        path="reimbursements/new"
+        element={layout(<ReimbursementFormPage token={token} me={me} />, false)}
+      />
+      <Route path="review" element={adminOnly(<ReviewPage {...props} />, true)} />
+      <Route path="operations" element={adminOnly(<OperationsPage {...props} />)} />
+      <Route path="audit" element={adminOnly(<AuditPage {...props} />)} />
       <Route
         path="participants"
-        element={
-          me.role === 'ADMIN' ? (
-            <ManageParticipantsPage token={token} me={me} />
-          ) : (
-            <Navigate to={basePath} replace />
-          )
-        }
+        element={adminOnly(<ManageParticipantsPage token={token} me={me} />)}
       />
-      <Route
-        path="settings"
-        element={
-          me.role === 'ADMIN' ? <SettingsPage {...props} /> : <Navigate to={basePath} replace />
-        }
-      />
+      <Route path="settings" element={adminOnly(<SettingsPage {...props} />)} />
       <Route path="*" element={<Navigate to={basePath} replace />} />
     </Routes>
   );

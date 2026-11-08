@@ -3,6 +3,7 @@ import type {
   CreateTransactionRequest,
   TransactionRevisionView,
   TransactionView,
+  UpdateTransactionRequest,
 } from '@nikount/contracts';
 import {
   computeSplit,
@@ -26,6 +27,7 @@ import { listParticipants, type ParticipantRow } from '../participants/repositor
 import * as repo from './repository.js';
 
 export type CreateTransactionInput = z.output<typeof CreateTransactionRequest>;
+export type UpdateTransactionInput = z.output<typeof UpdateTransactionRequest>;
 
 interface RequestMeta {
   requestId: string;
@@ -181,7 +183,11 @@ function split(amount: number, distribution: DistributionInput): ComputedShare[]
   }
 }
 
-function validateParties(input: CreateTransactionInput, active: Map<string, ParticipantRow>): void {
+/** Payeur et concernés admis : participants actifs (et, en modification, ceux déjà présents). */
+function validateParties(
+  input: Pick<CreateTransactionInput, 'type' | 'payerId' | 'distribution'>,
+  active: Map<string, ParticipantRow> | Set<string>,
+): void {
   if (!active.has(input.payerId)) {
     throw new DomainError(400, 'PAYER_INVALID', 'Le payeur doit être un participant actif.', {
       payerId: input.payerId,
@@ -486,4 +492,156 @@ export async function changeStatus(
   );
   const byId = new Map(views.map((v) => [v.id, v]));
   return ids.map((id) => byId.get(id)).filter((v): v is TransactionView => v !== undefined);
+}
+
+// --- Modification (admin) --------------------------------------------------------------------
+
+/** Statuts modifiables : une opération refusée ou annulée reste telle quelle (historique). */
+const EDITABLE_STATUSES = new Set<repo.TransactionRow['status']>(['PENDING', 'VALIDATED']);
+
+function sameShares(a: repo.ShareRow[], b: ComputedShare[]): boolean {
+  if (a.length !== b.length) return false;
+  const byId = new Map(a.map((s) => [s.participantId, s]));
+  return b.every((s) => {
+    const old = byId.get(s.participantId);
+    return old !== undefined && old.amount === s.amount && old.inputValue === s.inputValue;
+  });
+}
+
+/**
+ * Remplace le contenu d'une opération en attente ou validée (montant, payeur, répartition,
+ * description, date, catégorie) sans changer son type ni son statut — D13 : modification en place
+ * avec révision. Les soldes suivent d'eux-mêmes, puisqu'ils sont calculés depuis les parts.
+ * Le payeur et les concernés doivent être actifs, sauf s'ils figuraient déjà dans l'opération
+ * (corriger une vieille dépense ne doit pas obliger à réactiver quelqu'un).
+ */
+export async function updateTransaction(
+  db: Database,
+  access: AdminAccessContext,
+  transactionId: string,
+  input: UpdateTransactionInput,
+  meta: RequestMeta,
+): Promise<TransactionView> {
+  await db.transaction(async (tx) => {
+    const nikount = await getNikount(tx, access.nikountId, 'share');
+    if (!isActionAllowed('EDIT_OR_CANCEL', nikount.state)) {
+      throw new DomainError(
+        409,
+        'INVALID_STATE',
+        'Ce nikount est clôturé : plus aucun changement.',
+        {
+          state: nikount.state,
+        },
+      );
+    }
+
+    const [current] = await repo.lockTransactions(tx, access.nikountId, [transactionId]);
+    if (!current) throw new DomainError(404, 'NOT_FOUND', 'Ressource introuvable.');
+    if (current.version !== input.version) {
+      throw new DomainError(
+        409,
+        'VERSION_CONFLICT',
+        'Cette opération a été modifiée entre-temps.',
+        {
+          currentVersion: current.version,
+        },
+      );
+    }
+    if (!EDITABLE_STATUSES.has(current.status)) {
+      throw new DomainError(
+        409,
+        'NOT_EDITABLE',
+        'Une opération refusée ou annulée ne se modifie plus.',
+        { status: current.status },
+      );
+    }
+
+    const participants = await listParticipants(tx, access.nikountId);
+    const currentShares = await repo.sharesOf(tx, access.nikountId, current.id);
+    const allowed = new Set([
+      ...participants.filter((p) => p.isActive).map((p) => p.id),
+      current.payerId,
+      ...currentShares.map((s) => s.participantId),
+    ]);
+    validateParties({ ...input, type: current.type }, allowed);
+
+    const order = new Map(participants.map((p) => [p.id, p.sortOrder]));
+    const shares = split(input.amount, orderedDistribution(input.distribution, order));
+
+    const changed: string[] = [];
+    const fields = ['amount', 'description', 'category', 'occurredOn', 'payerId'] as const;
+    for (const key of fields) if (current[key] !== input[key]) changed.push(key);
+    if (current.distributionMode !== input.distribution.mode) changed.push('distributionMode');
+    if (!sameShares(currentShares, shares)) changed.push('shares');
+    // Rien à changer : pas de nouvelle révision ni d'événement.
+    if (changed.length === 0) return;
+
+    const result = await repo.replaceContent(
+      tx,
+      access.nikountId,
+      current,
+      {
+        amount: input.amount,
+        description: input.description,
+        category: input.category,
+        occurredOn: input.occurredOn,
+        payerId: input.payerId,
+        distributionMode: input.distribution.mode,
+      },
+      shares.map((share) => ({
+        id: uuidv7(),
+        transactionId: current.id,
+        nikountId: access.nikountId,
+        participantId: share.participantId,
+        inputValue: share.inputValue,
+        amount: share.amount,
+      })),
+    );
+    if (!result) {
+      throw new DomainError(409, 'VERSION_CONFLICT', 'Cette opération a été modifiée entre-temps.');
+    }
+
+    const reason = input.reason ?? null;
+    const declaredBy =
+      (await findAdminAccess(tx, access.nikountId, access.adminId))?.participantId ?? null;
+    await repo.insertRevision(tx, {
+      id: uuidv7(),
+      transactionId: current.id,
+      nikountId: access.nikountId,
+      revision: (await repo.lastRevision(tx, access.nikountId, current.id)) + 1,
+      snapshot: { snapshotVersion: 1, ...toView(result.row, result.shares, new Map()) },
+      changedByKind: 'ADMIN',
+      changedByAdminId: access.adminId,
+      declaredByParticipantId: declaredBy,
+      reason,
+    });
+    await recordAuditEvent(tx, {
+      nikountId: access.nikountId,
+      actorKind: 'ADMIN',
+      actorAdminId: access.adminId,
+      action: 'transaction.updated',
+      entityType: 'transaction',
+      entityId: current.id,
+      data: {
+        changed,
+        before: Object.fromEntries(
+          changed.filter((k) => k !== 'shares').map((k) => [k, current[k as keyof typeof current]]),
+        ),
+        after: Object.fromEntries(
+          changed
+            .filter((k) => k !== 'shares')
+            .map((k) => [
+              k,
+              k === 'distributionMode'
+                ? input.distribution.mode
+                : input[k as (typeof fields)[number]],
+            ]),
+        ),
+        ...(reason ? { reason } : {}),
+      },
+      requestId: meta.requestId,
+    });
+  });
+
+  return getTransaction(db, access.nikountId, transactionId);
 }

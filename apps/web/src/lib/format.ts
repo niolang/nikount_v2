@@ -27,3 +27,8 @@ export function formatMoney(
 ): string {
   return formatter(currency, signed).format(amount / 100);
 }
+
+/** Montant en unités mineures → texte saisissable (« 3000 » → « 30,00 »). */
+export function toAmountInput(minor: MinorUnits): string {
+  return (minor / 100).toFixed(2).replace('.', ',');
+}

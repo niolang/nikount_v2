@@ -19,6 +19,7 @@ import { healthRoutes } from './modules/health/routes.js';
 import { protectedNikountRoutes, publicNikountRoutes } from './modules/nikounts/routes.js';
 import { participantRoutes } from './modules/participants/routes.js';
 import { transactionRoutes } from './modules/transactions/routes.js';
+import { auditRoutes } from './modules/audit/routes.js';
 import { balanceRoutes } from './modules/balances/routes.js';
 
 export interface AppDependencies {
@@ -96,6 +97,7 @@ export async function buildApp(deps: AppDependencies): Promise<AppInstance> {
         await protectedApi.register(participantRoutes, { db });
         await protectedApi.register(transactionRoutes, { db });
         await protectedApi.register(balanceRoutes, { db });
+        await protectedApi.register(auditRoutes, { db });
       });
     },
     { prefix: '/api/v1' },

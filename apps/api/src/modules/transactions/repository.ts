@@ -195,3 +195,75 @@ export async function findTransactions(
       ),
     );
 }
+
+/** Parts actuelles d'une opération de CE nikount. */
+export async function sharesOf(
+  db: Database,
+  nikountId: string,
+  transactionId: string,
+): Promise<ShareRow[]> {
+  return db
+    .select()
+    .from(transactionShare)
+    .where(
+      and(
+        eq(transactionShare.nikountId, nikountId),
+        eq(transactionShare.transactionId, transactionId),
+      ),
+    );
+}
+
+/** Numéro de la dernière révision d'une opération. */
+export async function lastRevision(
+  db: Database,
+  nikountId: string,
+  transactionId: string,
+): Promise<number> {
+  const [row] = await db
+    .select({ revision: transactionRevision.revision })
+    .from(transactionRevision)
+    .where(
+      and(
+        eq(transactionRevision.nikountId, nikountId),
+        eq(transactionRevision.transactionId, transactionId),
+      ),
+    )
+    .orderBy(desc(transactionRevision.revision))
+    .limit(1);
+  return row?.revision ?? 0;
+}
+
+/**
+ * Remplace le contenu d'une opération (pas son statut) si elle est toujours à la version lue :
+ * `null` sinon. Les anciennes parts sont remplacées ; elles restent dans les révisions.
+ * La cohérence Σ parts = montant est revérifiée par la base en fin de transaction SQL.
+ */
+export async function replaceContent(
+  db: Database,
+  nikountId: string,
+  current: Pick<TransactionRow, 'id' | 'version'>,
+  changes: Pick<
+    typeof financialTransaction.$inferInsert,
+    'amount' | 'description' | 'category' | 'occurredOn' | 'payerId' | 'distributionMode'
+  >,
+  shares: (typeof transactionShare.$inferInsert)[],
+): Promise<{ row: TransactionRow; shares: ShareRow[] } | null> {
+  const [row] = await db
+    .update(financialTransaction)
+    .set({ ...changes, version: current.version + 1, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financialTransaction.nikountId, nikountId),
+        eq(financialTransaction.id, current.id),
+        eq(financialTransaction.version, current.version),
+      ),
+    )
+    .returning();
+  if (!row) return null;
+  await db
+    .delete(transactionShare)
+    .where(
+      and(eq(transactionShare.nikountId, nikountId), eq(transactionShare.transactionId, row.id)),
+    );
+  return { row, shares: await db.insert(transactionShare).values(shares).returning() };
+}

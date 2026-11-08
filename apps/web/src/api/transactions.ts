@@ -4,6 +4,7 @@ import {
   TransactionRevisionListResponse,
   TransactionView,
   type CreateTransactionRequest,
+  type UpdateTransactionRequest,
 } from '@nikount/contracts';
 import { balanceKeys } from './balances';
 import { apiRequest } from './client';
@@ -126,5 +127,30 @@ export function useBulkStatus(adminToken: string) {
         schema: TransactionListResponse,
       }),
     onSettled: refresh,
+  });
+}
+
+/** Modifier le contenu d'une opération (admin) : nouvelle révision, statut inchangé. */
+export function useUpdateTransaction(adminToken: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateTransactionRequest }) =>
+      apiRequest({
+        path: `/transactions/${id}`,
+        method: 'PUT',
+        token: adminToken,
+        body,
+        schema: TransactionView,
+      }),
+    onSuccess: (transaction) => {
+      queryClient.setQueryData([...transactionKeys.list(adminToken), transaction.id], transaction);
+    },
+    // Succès ou conflit : historique, détail, révisions et soldes repartent du serveur.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: transactionKeys.list(adminToken) }),
+        queryClient.invalidateQueries({ queryKey: balanceKeys.all(adminToken) }),
+        queryClient.invalidateQueries({ queryKey: ['nikount', adminToken, 'audit'] }),
+      ]),
   });
 }
