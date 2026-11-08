@@ -4,6 +4,8 @@ import { isActionAllowed } from '@nikount/core';
 import { useParticipantLink } from '../../api/nikount';
 import { useParticipants } from '../../api/participants';
 import { useTransactions } from '../../api/transactions';
+import { useBalances } from '../../api/balances';
+import { BalancesCard } from '../balances/BalancesCard';
 import { Card, PageShell, ShareableLink, StateBadge } from '../../components/ui';
 import { transactionEmoji } from '../../lib/categories';
 import { formatShortDate } from '../../lib/dates';
@@ -17,6 +19,7 @@ const RECENT_LIMIT = 10;
 export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
   const participants = useParticipants(token);
   const transactions = useTransactions(token);
+  const balances = useBalances(token);
   const identity = useCurrentParticipant(token, me, participants.data ?? []);
   const isAdmin = me.role === 'ADMIN';
   const needsIdentity = !isAdmin && participants.isSuccess && identity.current === null;
@@ -63,6 +66,20 @@ export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
           {flash ? (
             <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
               {flash}
+            </p>
+          ) : null}
+
+          {balances.data && participants.data ? (
+            <BalancesCard
+              balances={balances.data}
+              participants={participants.data}
+              currentId={identity.current?.id ?? null}
+              currency={me.nikount.currency}
+              state={me.nikount.state}
+            />
+          ) : balances.isError ? (
+            <p role="alert" className="mt-6 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              Impossible de charger les soldes.
             </p>
           ) : null}
 

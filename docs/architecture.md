@@ -94,8 +94,7 @@ nikount/
 │   ├── core/                          # ⚠ moteur comptable PUR (aucune I/O)
 │   │   ├── src/money.ts               # centimes, parsing/format
 │   │   ├── src/split.ts               # EQUAL / SHARES / PERCENT / AMOUNT + arrondi
-│   │   ├── src/balances.ts            # soldes, invariants
-│   │   ├── src/suggestions.ts         # qui paie la prochaine, virements suggérés
+│   │   ├── src/balances.ts            # soldes, invariants, qui paie la prochaine, virements suggérés
 │   │   ├── src/rules.ts               # matrice états/statuts/permissions
 │   │   └── test/                      # tests unitaires + tests de propriétés
 │   └── contracts/                     # schémas Zod des requêtes/réponses API + enums

@@ -116,9 +116,9 @@ le serveur recalcule via `@nikount/core` et stocke le résultat. Réponse : l'op
 
 ### Soldes
 
-| Méthode | Route       | Rôle | Description                                                                                                            |
-| ------- | ----------- | ---- | ---------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/balances` | P/A  | `{ balances: [{ participantId, balance }], nextPayerId, settlementSuggestions: [{ from, to, amount }], pendingTotal }` |
+| Méthode | Route       | Rôle | Description                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------- | ----------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/balances` | P/A  | `{ balances: [{ participantId, balance }], nextPayerId, settlementSuggestions: [{ from, to, amount }], pending: { count, amount } }` — soldes calculés en SQL sur les seules opérations `VALIDATED` (tous les participants, désactivés compris, dans l’ordre d’affichage) ; `nextPayerId` : participant actif au solde le plus bas, `null` si tout est soldé ; suggestions : appariement glouton, au plus n − 1 virements |
 
 ### Audit
 

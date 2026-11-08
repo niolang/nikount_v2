@@ -9,7 +9,7 @@
 | **2** Nikount + accès ✅           | `POST /nikounts`, tokens (génération, hash), plugin `auth`, `GET /me`, `/nikount` ; écrans `/`, `/new`, « Vos liens », accueil vide ; « Mes nikounts » local                                                                                                     | Tests : token inconnu → 401 ; participant ≠ admin ; création rate-limitée                                                |
 | **3** Participants ✅              | CRUD admin, désactivation, choix d'identité déclarée côté participant                                                                                                                                                                                            | Tests : nom unique, isolation inter-nikount                                                                              |
 | **4** Opérations + répartitions ✅ | `core/split.ts` **écrit en premier, test-first** ; tables `transaction`, `transaction_share`, `transaction_revision`, triggers ; `POST/GET /transactions` ; formulaire mobile avec prévisualisation                                                              | Tests de propriétés : Σ parts = montant pour tous modes ; trigger refuse une incohérence ; idempotence `clientRequestId` |
-| **5** Moteur comptable + soldes    | `core/balances.ts`, `suggestions.ts`, `GET /balances`, écran soldes « à recevoir / à payer », « qui paie la prochaine »                                                                                                                                          | Σ soldes = 0 (propriété) ; SQL ≡ moteur ; exemples du cahier des charges reproduits                                      |
+| **5** Moteur comptable + soldes ✅ | `core/balances.ts` (soldes + suggestions), `GET /balances`, écran soldes « à recevoir / à payer », « qui paie la prochaine »                                                                                                                                     | Σ soldes = 0 (propriété) ; SQL ≡ moteur ; exemples du cahier des charges reproduits                                      |
 | **6** Historique                   | Liste groupée par jour, filtres, page détail (parts → montants), révisions                                                                                                                                                                                       | Opérations annulées/refusées visibles                                                                                    |
 | **7** Validation                   | Statuts, validate/reject/cancel, bulk tout-ou-rien, bannière « N à valider », audit                                                                                                                                                                              | Matrice de transitions testée exhaustivement ; PENDING sans effet sur soldes                                             |
 | **8** Remboursements               | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
@@ -38,6 +38,13 @@
 > en base ; `POST/GET /transactions` (idempotence par `clientRequestId`, participant → `PENDING`, admin → `VALIDATED`,
 > révision 1 + audit) ; formulaire mobile avec aperçu calculé par le même moteur que le serveur. 294 tests ; parcours
 > vérifié dans le navigateur. L’API accepte déjà les remboursements (même moteur) ; leur écran arrive en Phase 8.
+
+> ✅ Phase 5 : `@nikount/core/balances` (soldes, « qui paie la prochaine », virements suggérés) écrit tests d’abord
+> (exemples du cahier des charges + propriétés : Σ soldes = 0, opérations non validées sans effet, ordre indifférent,
+> virements qui soldent tout en ≤ n − 1). `GET /balances` calcule en SQL et refuse de répondre si Σ ≠ 0 ; tests
+> « SQL ≡ moteur » sur des jeux aléatoires (tous modes, opérations en attente). Accueil : « Ton solde », à recevoir /
+> à payer, qui paie la prochaine, opérations en attente, virements suggérés (dépliés en phase de règlement). 326 tests ;
+> vérifié dans le navigateur côté admin et participant.
 
 ## Stratégie de tests
 

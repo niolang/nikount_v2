@@ -9,3 +9,4 @@ export * from './tokens.js';
 export * from './participant.js';
 export * from './nikount.js';
 export * from './transaction.js';
+export * from './balances.js';

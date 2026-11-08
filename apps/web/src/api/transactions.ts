@@ -4,6 +4,7 @@ import {
   TransactionView,
   type CreateTransactionRequest,
 } from '@nikount/contracts';
+import { balanceKeys } from './balances';
 import { apiRequest } from './client';
 
 export const transactionKeys = {
@@ -31,6 +32,11 @@ export function useCreateTransaction(token: string) {
         body,
         schema: TransactionView,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: transactionKeys.list(token) }),
+    // Une nouvelle opération peut changer l'historique ET les soldes.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: transactionKeys.list(token) }),
+        queryClient.invalidateQueries({ queryKey: balanceKeys.all(token) }),
+      ]),
   });
 }
