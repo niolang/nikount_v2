@@ -34,7 +34,7 @@ jobs:
     env:
       TEST_POSTGRES_URL: postgres://test:test@localhost:5432/nikount_test
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
@@ -81,7 +81,7 @@ jobs:
     env:
       COMPOSE: docker compose -f docker-compose.prod.yml
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Secrets jetables
         run: |
           {
