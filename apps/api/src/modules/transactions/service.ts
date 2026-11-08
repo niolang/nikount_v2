@@ -250,7 +250,7 @@ export async function createTransaction(
 
   try {
     const id = await db.transaction(async (tx) => {
-      const nikount = await getNikount(tx, access.nikountId);
+      const nikount = await getNikount(tx, access.nikountId, 'share');
       const action = input.type === 'EXPENSE' ? 'CREATE_EXPENSE' : 'CREATE_REIMBURSEMENT';
       if (!isActionAllowed(action, nikount.state)) {
         throw new DomainError(
@@ -403,7 +403,7 @@ export async function changeStatus(
   const reason = action === 'VALIDATE' ? null : (options.reason ?? null);
 
   await db.transaction(async (tx) => {
-    const nikount = await getNikount(tx, access.nikountId);
+    const nikount = await getNikount(tx, access.nikountId, 'share');
     if (!isStatusActionAllowedInState(action, nikount.state)) {
       throw new DomainError(
         409,

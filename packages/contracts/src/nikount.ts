@@ -56,7 +56,10 @@ export const NikountView = z.object({
   currency: z.string(),
   timezone: z.string(),
   state: NikountState,
+  stateChangedAt: z.iso.datetime({ offset: true }),
   createdAt: z.iso.datetime({ offset: true }),
+  /** Version pour le verrouillage optimiste (renommage, changement d'état). */
+  version: z.number().int(),
 });
 export type NikountView = z.infer<typeof NikountView>;
 
@@ -92,3 +95,54 @@ export const ParticipantLinkResponse = z.object({
   participantToken: ParticipantToken,
 });
 export type ParticipantLinkResponse = z.infer<typeof ParticipantLinkResponse>;
+
+// --- Cycle de vie et paramètres (Phase 9) ---------------------------------
+
+/** Motif d'une réouverture (obligatoire) ou d'un autre changement d'état (facultatif). */
+export const StateChangeReason = cleanText(1, 200);
+
+export const ChangeNikountStateRequest = z.strictObject({
+  to: NikountState,
+  reason: StateChangeReason.optional(),
+  version: z.number().int().min(1),
+});
+export type ChangeNikountStateRequest = z.input<typeof ChangeNikountStateRequest>;
+
+export const UpdateNikountRequest = z.strictObject({
+  name: NikountName,
+  version: z.number().int().min(1),
+});
+export type UpdateNikountRequest = z.input<typeof UpdateNikountRequest>;
+
+// --- Admins -----------------------------------------------------------------
+
+/** Nombre maximal d'admins actifs par nikount. */
+export const MAX_ACTIVE_ADMINS = 20;
+
+export const AdminListItem = AdminView.extend({
+  createdAt: z.iso.datetime({ offset: true }),
+  revokedAt: z.iso.datetime({ offset: true }).nullable(),
+  lastUsedAt: z.iso.datetime({ offset: true }).nullable(),
+  /** L'admin qui fait la requête. */
+  isYou: z.boolean(),
+});
+export type AdminListItem = z.infer<typeof AdminListItem>;
+
+export const AdminListResponse = z.object({ admins: z.array(AdminListItem) });
+export type AdminListResponse = z.infer<typeof AdminListResponse>;
+
+export const CreateAdminRequest = z.strictObject({
+  label: PersonLabel,
+  /** Participant que représente ce nouvel admin (absent : admin non participant). */
+  participantId: z.uuid().nullable().default(null),
+});
+export type CreateAdminRequest = z.input<typeof CreateAdminRequest>;
+
+/** Le lien du nouvel admin n'est renvoyé qu'ici, une seule fois (D11). */
+export const CreateAdminResponse = z.object({
+  admin: AdminListItem,
+  adminToken: AdminToken,
+});
+export type CreateAdminResponse = z.infer<typeof CreateAdminResponse>;
+
+export const AdminIdParams = z.strictObject({ id: z.uuid() });

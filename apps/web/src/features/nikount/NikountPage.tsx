@@ -15,6 +15,7 @@ import { ManageParticipantsPage } from './ManageParticipantsPage';
 import { MenuPage } from './MenuPage';
 import { NikountHome } from './NikountHome';
 import { NikountLayout } from './NikountLayout';
+import { SettingsPage } from './SettingsPage';
 
 /**
  * Point d'entrée d'un nikount, pour `/n/:token/*` (participant) et `/a/:token/*` (admin).
@@ -93,6 +94,12 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
           ) : (
             <Navigate to={basePath} replace />
           )
+        }
+      />
+      <Route
+        path="settings"
+        element={
+          me.role === 'ADMIN' ? <SettingsPage {...props} /> : <Navigate to={basePath} replace />
         }
       />
       <Route path="*" element={<Navigate to={basePath} replace />} />

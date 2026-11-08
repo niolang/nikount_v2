@@ -37,6 +37,12 @@ export function NikountHome({
   const canReimburse =
     isActionAllowed('CREATE_REIMBURSEMENT', me.nikount.state) &&
     (participants.data ?? []).filter((p) => p.isActive).length >= 2;
+  // Règlement terminé : plus rien en attente et tous les soldes à zéro.
+  const readyToClose =
+    me.nikount.state === 'SETTLEMENT' &&
+    balances.data !== undefined &&
+    balances.data.pending.count === 0 &&
+    balances.data.balances.every((b) => b.balance === 0);
   const flash = (useLocation().state as { flash?: string } | null)?.flash;
 
   return (
@@ -100,6 +106,23 @@ export function NikountHome({
               </span>
               <span aria-hidden="true">›</span>
             </Link>
+          ) : null}
+
+          {isAdmin && readyToClose ? (
+            <Link
+              to={`${basePath}/settings`}
+              className="mt-4 flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 font-semibold text-emerald-900 ring-1 ring-emerald-300"
+            >
+              <span>✅ Tout est soldé : clôturer le nikount</span>
+              <span aria-hidden="true">›</span>
+            </Link>
+          ) : null}
+
+          {me.nikount.state === 'CLOSED' ? (
+            <p className="mt-4 rounded-xl bg-slate-100 p-3 text-sm text-slate-700">
+              Ce nikount est clôturé : il reste consultable, mais plus rien ne peut être ajouté ni
+              modifié.
+            </p>
           ) : null}
 
           {me.nikount.state === 'SETTLEMENT' ? (

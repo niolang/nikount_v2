@@ -36,7 +36,9 @@ export const nikountView = {
   currency: 'EUR',
   timezone: 'Europe/Paris',
   state: 'OPEN',
+  stateChangedAt: '2026-11-08T10:00:00.000Z',
   createdAt: '2026-11-08T10:00:00.000Z',
+  version: 1,
 };
 
 export const errorBody = (code: string, message = code) => ({

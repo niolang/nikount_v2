@@ -63,7 +63,30 @@ export function MenuPage({
         />
       ) : null}
 
-      {isAdmin ? <InviteCard token={token} nikountName={me.nikount.name} /> : null}
+      {isAdmin ? (
+        <InviteCard
+          token={token}
+          nikountName={me.nikount.name}
+          settingsPath={`${basePath}/settings`}
+        />
+      ) : null}
+
+      {isAdmin ? (
+        <Link
+          to={`${basePath}/settings`}
+          className="mt-4 flex items-center justify-between rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+        >
+          <span>
+            <span className="block font-bold">⚙️ Gestion du nikount</span>
+            <span className="mt-1 block text-sm text-slate-600">
+              Terminer, clôturer, renommer, administrateurs
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-xl text-slate-400">
+            ›
+          </span>
+        </Link>
+      ) : null}
 
       <Link to="/" className="mt-6 text-center text-sm font-semibold text-brand-700">
         Mes nikounts
@@ -115,7 +138,15 @@ function ParticipantsCard({
   );
 }
 
-function InviteCard({ token, nikountName }: { token: string; nikountName: string }) {
+function InviteCard({
+  token,
+  nikountName,
+  settingsPath,
+}: {
+  token: string;
+  nikountName: string;
+  settingsPath: string;
+}) {
   const participantLink = useParticipantLink(token, true);
   return (
     <Card className="mt-4">
@@ -134,6 +165,9 @@ function InviteCard({ token, nikountName }: { token: string; nikountName: string
       ) : (
         <p className="text-sm text-slate-500">Chargement du lien…</p>
       )}
+      <Link to={settingsPath} className="mt-3 inline-block text-sm font-semibold text-brand-700">
+        Le lien a trop circulé ? Le changer
+      </Link>
     </Card>
   );
 }

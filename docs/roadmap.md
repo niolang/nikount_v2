@@ -13,7 +13,7 @@
 | **6** Historique ✅                | Liste groupée par jour, filtres, page détail (parts → montants), révisions                                                                                                                                                                                       | Opérations annulées/refusées visibles                                                                                    |
 | **7** Validation ✅                | Statuts, validate/reject/cancel, bulk tout-ou-rien, bannière « N à valider », audit                                                                                                                                                                              | Matrice de transitions testée exhaustivement ; PENDING sans effet sur soldes                                             |
 | **8** Remboursements ✅            | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
-| **9** Cycle de vie                 | OPEN/SETTLEMENT/CLOSED, réouverture motivée, badge d'état, rotation du lien participant, gestion des admins                                                                                                                                                      | Matrice état × action testée ; clôture refusée si PENDING                                                                |
+| **9** Cycle de vie ✅              | OPEN/SETTLEMENT/CLOSED, réouverture motivée, badge d'état, rotation du lien participant, gestion des admins                                                                                                                                                      | Matrice état × action testée ; clôture refusée si PENDING                                                                |
 | **10** Admin desktop               | Layout `lg`, table dense (filtres, recherche, tri, sélection multiple), édition inline + panneau, audit, paramètres                                                                                                                                              | Parcours trésorier complet sur desktop                                                                                   |
 | **11** Durcissement                | Tests API d'isolation sur toutes les routes, en-têtes/CSP, rate limits, Playwright mobile (parcours clés), accessibilité, perf, `docker-compose.prod.yml`, sauvegardes, doc d'exploitation                                                                       | Revue sécurité OK ; Lighthouse mobile ≥ 90                                                                               |
 
@@ -64,6 +64,18 @@
 > « 💸 Remboursement » l’un sous l’autre ; onglet Remboursements avec bouton d’enregistrement ; en phase de règlement,
 > dépenses fermées et message explicatif. Participant → en attente (D3), admin → validé. 434 tests ; vérifié dans le
 > navigateur (virement suggéré → remboursement → validation → solde à zéro).
+
+> ✅ Phase 9 : changements d’état dans `@nikount/core` (`nikountTransition` : terminer, déverrouiller, clôturer,
+> réouvrir — motif obligatoire pour la réouverture, clôture refusée tant qu’une opération est en attente) et matrice
+> état × action étendue (renommage, admins et lien du groupe restent possibles une fois clôturé). API :
+> `POST /nikount/state`, `PATCH /nikount` (nom), `POST /nikount/participant-link/rotate`, `GET/POST /admins`,
+> `POST /admins/:id/revoke` (pas de révocation du dernier admin actif ; 20 admins actifs max), verrouillage optimiste
+> et audit partout. Le nikount est verrouillé en écriture (`FOR UPDATE`) pendant un changement d’état et en partage
+> (`FOR SHARE`) pendant la création ou la validation d’une opération : une clôture ne peut pas croiser une nouvelle
+> opération en attente. Front : écran « Gestion du nikount » (état avec confirmation et avertissement si les comptes
+> ne sont pas soldés, nom, nouveau lien du groupe, admins avec lien affiché une seule fois), entrées depuis le menu et
+> l’accueil (« Tout est soldé : clôturer »), message sur un nikount clôturé. 490 tests ; vérifié dans le navigateur.
+> Non fait : test de concurrence réelle de la clôture (PGlite n’a qu’une connexion) → Phase 11.
 
 ## Stratégie de tests
 

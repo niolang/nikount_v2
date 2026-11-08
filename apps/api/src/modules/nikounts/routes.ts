@@ -1,10 +1,17 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import {
+  AdminIdParams,
+  AdminListItem,
+  AdminListResponse,
+  ChangeNikountStateRequest,
+  CreateAdminRequest,
+  CreateAdminResponse,
   CreateNikountRequest,
   CreateNikountResponse,
   MeResponse,
   NikountView,
   ParticipantLinkResponse,
+  UpdateNikountRequest,
 } from '@nikount/contracts';
 import { getAccess, requireAdmin } from '../../auth/access.js';
 import type { Database } from '../../db/client.js';
@@ -70,5 +77,53 @@ export const protectedNikountRoutes: FastifyPluginAsyncZod<NikountRoutesOptions>
         participantToken: await service.getParticipantToken(db, secretBox, access.nikountId),
       };
     },
+  );
+
+  app.patch(
+    '/nikount',
+    { schema: { body: UpdateNikountRequest, response: { 200: NikountView } } },
+    async (request) =>
+      service.renameNikount(db, requireAdmin(request), request.body, { requestId: request.id }),
+  );
+
+  app.post(
+    '/nikount/state',
+    { schema: { body: ChangeNikountStateRequest, response: { 200: NikountView } } },
+    async (request) =>
+      service.changeState(db, requireAdmin(request), request.body, { requestId: request.id }),
+  );
+
+  app.post(
+    '/nikount/participant-link/rotate',
+    { schema: { response: { 200: ParticipantLinkResponse } } },
+    async (request) => ({
+      participantToken: await service.rotateParticipantLink(db, secretBox, requireAdmin(request), {
+        requestId: request.id,
+      }),
+    }),
+  );
+
+  app.get('/admins', { schema: { response: { 200: AdminListResponse } } }, async (request) => ({
+    admins: await service.listAdmins(db, requireAdmin(request)),
+  }));
+
+  app.post(
+    '/admins',
+    { schema: { body: CreateAdminRequest, response: { 201: CreateAdminResponse } } },
+    async (request, reply) => {
+      const created = await service.createAdmin(db, requireAdmin(request), request.body, {
+        requestId: request.id,
+      });
+      return reply.code(201).send(created);
+    },
+  );
+
+  app.post(
+    '/admins/:id/revoke',
+    { schema: { params: AdminIdParams, response: { 200: AdminListItem } } },
+    async (request) =>
+      service.revokeAdmin(db, requireAdmin(request), request.params.id, {
+        requestId: request.id,
+      }),
   );
 };

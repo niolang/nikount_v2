@@ -54,7 +54,7 @@ async function guardUniqueName<T>(
 }
 
 async function assertCanManageParticipants(db: Database, nikountId: string): Promise<void> {
-  const nikount = await getNikount(db, nikountId);
+  const nikount = await getNikount(db, nikountId, 'share');
   if (!isActionAllowed('MANAGE_PARTICIPANTS', nikount.state)) {
     throw new DomainError(409, 'INVALID_STATE', 'Ce nikount est clôturé : participants figés.');
   }

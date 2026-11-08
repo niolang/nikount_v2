@@ -28,15 +28,15 @@
 }
 ```
 
-| HTTP | Codes typiques                                                                                                                                                                                                                               |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400  | `VALIDATION_ERROR`, `SPLIT_*` (`SPLIT_PERCENT_NOT_100`, `SPLIT_AMOUNT_SUM_MISMATCH`, `SPLIT_DUPLICATE_PARTICIPANT`, `SPLIT_INVALID_VALUE`…), `PAYER_INVALID`, `PARTICIPANT_INVALID`, `REIMBURSEMENT_INVALID`, `DECLARED_PARTICIPANT_INVALID` |
-| 401  | `INVALID_TOKEN` (token inconnu, révoqué ou absent — message identique)                                                                                                                                                                       |
-| 403  | `ADMIN_REQUIRED`                                                                                                                                                                                                                             |
-| 404  | `NOT_FOUND`                                                                                                                                                                                                                                  |
-| 409  | `VERSION_CONFLICT`, `INVALID_STATE` (ex. dépense en `SETTLEMENT`), `INVALID_STATUS_TRANSITION`, `PENDING_REMAINING`                                                                                                                          |
-| 429  | `RATE_LIMITED`                                                                                                                                                                                                                               |
-| 500  | `INTERNAL_ERROR`                                                                                                                                                                                                                             |
+| HTTP | Codes typiques                                                                                                                                                                                                                                                                           |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400  | `REASON_REQUIRED` (réouverture sans motif), `VALIDATION_ERROR`, `SPLIT_*` (`SPLIT_PERCENT_NOT_100`, `SPLIT_AMOUNT_SUM_MISMATCH`, `SPLIT_DUPLICATE_PARTICIPANT`, `SPLIT_INVALID_VALUE`…), `PAYER_INVALID`, `PARTICIPANT_INVALID`, `REIMBURSEMENT_INVALID`, `DECLARED_PARTICIPANT_INVALID` |
+| 401  | `INVALID_TOKEN` (token inconnu, révoqué ou absent — message identique)                                                                                                                                                                                                                   |
+| 403  | `ADMIN_REQUIRED`                                                                                                                                                                                                                                                                         |
+| 404  | `NOT_FOUND`                                                                                                                                                                                                                                                                              |
+| 409  | `VERSION_CONFLICT`, `INVALID_STATE` (ex. dépense en `SETTLEMENT`), `INVALID_STATUS_TRANSITION`, `INVALID_STATE_TRANSITION`, `PENDING_REMAINING`, `LAST_ADMIN`, `ADMIN_LIMIT_REACHED`                                                                                                     |
+| 429  | `RATE_LIMITED`                                                                                                                                                                                                                                                                           |
+| 500  | `INTERNAL_ERROR`                                                                                                                                                                                                                                                                         |
 
 ## 2. Routes
 
@@ -51,14 +51,14 @@ Légende rôle : **P** participant, **A** admin, **—** public.
 
 ### Contexte
 
-| Méthode | Route                              | Rôle | Description                                                                             |
-| ------- | ---------------------------------- | ---- | --------------------------------------------------------------------------------------- |
-| GET     | `/me`                              | P/A  | `{ role, admin?: { id, label, participantId }, nikount: {...} }` — appelé au chargement |
-| GET     | `/nikount`                         | P/A  | Nom, devise, état, compteurs (dont `pendingCount`)                                      |
-| PATCH   | `/nikount`                         | A    | `name`, `timezone`, `version`                                                           |
-| POST    | `/nikount/state`                   | A    | `{ to, reason?, version }` — transitions de [product.md §4](product.md)                 |
-| POST    | `/nikount/participant-link/rotate` | A    | Invalide l'ancien lien participant, renvoie le nouveau token                            |
-| GET     | `/nikount/participant-link`        | A    | Réaffiche le lien participant (token déchiffré, D17)                                    |
+| Méthode | Route                              | Rôle | Description                                                                                         |
+| ------- | ---------------------------------- | ---- | --------------------------------------------------------------------------------------------------- |
+| GET     | `/me`                              | P/A  | `{ role, admin?: { id, label, participantId }, nikount: {...} }` — appelé au chargement             |
+| GET     | `/nikount`                         | P/A  | Nom, devise, état, compteurs (dont `pendingCount`)                                                  |
+| PATCH   | `/nikount`                         | A    | `{ name, version }` (fuseau horaire : non modifiable pour l’instant)                                |
+| POST    | `/nikount/state`                   | A    | `{ to, reason?, version }` — transitions de [product.md §4](product.md), motif requis pour réouvrir |
+| POST    | `/nikount/participant-link/rotate` | A    | Invalide l'ancien lien participant, renvoie le nouveau token                                        |
+| GET     | `/nikount/participant-link`        | A    | Réaffiche le lien participant (token déchiffré, D17)                                                |
 
 ### Participants
 
@@ -72,7 +72,7 @@ Légende rôle : **P** participant, **A** admin, **—** public.
 
 | Méthode | Route                | Rôle | Description                                                                    |
 | ------- | -------------------- | ---- | ------------------------------------------------------------------------------ |
-| GET     | `/admins`            | A    | Liste (sans tokens)                                                            |
+| GET     | `/admins`            | A    | Liste (sans tokens), révoqués compris, avec `isYou`                            |
 | POST    | `/admins`            | A    | `{ label, participantId? }` → renvoie le **nouveau lien admin une seule fois** |
 | POST    | `/admins/:id/revoke` | A    | Interdit sur le dernier admin actif ; un admin peut se révoquer lui-même       |
 
