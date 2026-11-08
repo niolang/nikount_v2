@@ -1,0 +1,141 @@
+{
+  "id": "4cb06176-afb3-4f11-a603-3e68491ec672",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.nikount": {
+      "name": "nikount",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "char(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EUR'"
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Europe/Paris'"
+        },
+        "state": {
+          "name": "state",
+          "type": "nikount_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OPEN'"
+        },
+        "state_changed_at": {
+          "name": "state_changed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "participant_token_hash": {
+          "name": "participant_token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_token_rotated_at": {
+          "name": "participant_token_rotated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "nikount_participant_token_hash_unique": {
+          "name": "nikount_participant_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "participant_token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "nikount_name_length": {
+          "name": "nikount_name_length",
+          "value": "char_length(\"nikount\".\"name\") between 1 and 60"
+        },
+        "nikount_currency_format": {
+          "name": "nikount_currency_format",
+          "value": "\"nikount\".\"currency\" ~ '^[A-Z]{3}$'"
+        },
+        "nikount_token_hash_length": {
+          "name": "nikount_token_hash_length",
+          "value": "octet_length(\"nikount\".\"participant_token_hash\") = 32"
+        },
+        "nikount_version_positive": {
+          "name": "nikount_version_positive",
+          "value": "\"nikount\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.nikount_state": {
+      "name": "nikount_state",
+      "schema": "public",
+      "values": [
+        "OPEN",
+        "SETTLEMENT",
+        "CLOSED"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

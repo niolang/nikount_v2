@@ -1,0 +1,37 @@
+{
+  "name": "@nikount/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env --conditions=@nikount/source src/server.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "pnpm --filter @nikount/contracts build && drizzle-kit generate",
+    "db:migrate": "node dist/db/migrate.js",
+    "db:migrate:dev": "tsx --env-file-if-exists=../../.env --conditions=@nikount/source src/db/migrate.ts",
+    "db:local": "node -e \"require('fs').mkdirSync('../../.data',{recursive:true})\" && pglite-server --db=../../.data/pglite --port=5433 --max-connections=10"
+  },
+  "dependencies": {
+    "@fastify/helmet": "^13.2.0",
+    "@nikount/contracts": "workspace:*",
+    "@nikount/core": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
+    "fastify-type-provider-zod": "^7.0.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
+    "@electric-sql/pglite-socket": "^0.2.18",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15"
+  }
+}

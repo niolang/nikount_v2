@@ -1,0 +1,70 @@
+# Développement local : PostgreSQL + API (rechargement à chaud) + front (Vite).
+#   cp .env.example .env
+#   docker compose up
+# Front : http://localhost:5173 — API : http://localhost:3000/api/v1/health
+name: nikount
+
+x-node-dev: &node-dev
+  build:
+    context: .
+    dockerfile: docker/dev.Dockerfile
+  volumes:
+    - .:/app
+    # node_modules restent ceux de l'image (Linux), jamais ceux de l'hôte.
+    - /app/node_modules
+    - /app/apps/api/node_modules
+    - /app/apps/web/node_modules
+    - /app/packages/core/node_modules
+    - /app/packages/contracts/node_modules
+  environment:
+    # Surveillance des fichiers par scrutation : nécessaire avec un montage depuis Windows/macOS.
+    CHOKIDAR_USEPOLLING: 'true'
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nikount}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nikount}
+      POSTGRES_DB: ${POSTGRES_DB:-nikount}
+    ports:
+      - '5432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    <<: *node-dev
+    command: sh -c "pnpm --filter @nikount/api db:migrate:dev && pnpm --filter @nikount/api dev"
+    environment:
+      CHOKIDAR_USEPOLLING: 'true'
+      NODE_ENV: development
+      API_HOST: 0.0.0.0
+      API_PORT: '3000'
+      DATABASE_URL: postgres://${POSTGRES_USER:-nikount}:${POSTGRES_PASSWORD:-nikount}@db:5432/${POSTGRES_DB:-nikount}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY: '0'
+      PUBLIC_BASE_URL: http://localhost:5173
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *node-dev
+    command: pnpm --filter @nikount/web dev
+    environment:
+      CHOKIDAR_USEPOLLING: 'true'
+      VITE_API_PROXY_TARGET: http://api:3000
+    ports:
+      - '5173:5173'
+    depends_on:
+      - api
+
+volumes:
+  db-data:
