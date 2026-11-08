@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router';
 import type { MeResponse } from '@nikount/contracts';
+import { isActionAllowed } from '@nikount/core';
 import { useParticipants } from '../../api/participants';
 import { useTransactions } from '../../api/transactions';
 import { PageShell } from '../../components/ui';
@@ -30,6 +31,9 @@ export function HistoryPage({
   const participants = useParticipants(token);
   const names = new Map((participants.data ?? []).map((p) => [p.id, p.name]));
   const currency = me.nikount.currency;
+  const canReimburse =
+    isActionAllowed('CREATE_REIMBURSEMENT', me.nikount.state) &&
+    (participants.data ?? []).filter((p) => p.isActive).length >= 2;
 
   const visible = (transactions.data ?? []).filter((t) => matchesFilter(t, filter));
   const groups = groupByDay(visible, todayIn(me.nikount.timezone));
@@ -40,6 +44,15 @@ export function HistoryPage({
   return (
     <PageShell>
       <h1 className="text-2xl font-bold">Historique</h1>
+
+      {filter === 'REIMBURSEMENT' && canReimburse ? (
+        <Link
+          to={`${basePath}/reimbursements/new`}
+          className="mt-4 flex min-h-12 items-center justify-center rounded-2xl bg-brand-700 px-4 font-semibold text-white shadow-sm hover:bg-brand-800"
+        >
+          💸 Enregistrer un remboursement
+        </Link>
+      ) : null}
 
       <nav
         aria-label="Filtres"

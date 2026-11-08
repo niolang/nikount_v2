@@ -9,6 +9,7 @@ import { forgetNikount, rememberNikount } from '../../lib/recent-nikounts';
 import { ReviewPage } from '../review/ReviewPage';
 import { ExpenseFormPage } from '../transactions/ExpenseFormPage';
 import { HistoryPage } from '../transactions/HistoryPage';
+import { ReimbursementFormPage } from '../transactions/ReimbursementFormPage';
 import { TransactionDetailPage } from '../transactions/TransactionDetailPage';
 import { ManageParticipantsPage } from './ManageParticipantsPage';
 import { MenuPage } from './MenuPage';
@@ -73,6 +74,7 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
       <Route path="menu" element={withNav(<MenuPage {...props} />)} />
       <Route path="tx/:transactionId" element={withNav(<TransactionDetailPage {...props} />)} />
       <Route path="expenses/new" element={<ExpenseFormPage token={token} me={me} />} />
+      <Route path="reimbursements/new" element={<ReimbursementFormPage token={token} me={me} />} />
       <Route
         path="review"
         element={

@@ -12,13 +12,13 @@
 | **5** Moteur comptable + soldes ✅ | `core/balances.ts` (soldes + suggestions), `GET /balances`, écran soldes « à recevoir / à payer », « qui paie la prochaine »                                                                                                                                     | Σ soldes = 0 (propriété) ; SQL ≡ moteur ; exemples du cahier des charges reproduits                                      |
 | **6** Historique ✅                | Liste groupée par jour, filtres, page détail (parts → montants), révisions                                                                                                                                                                                       | Opérations annulées/refusées visibles                                                                                    |
 | **7** Validation ✅                | Statuts, validate/reject/cancel, bulk tout-ou-rien, bannière « N à valider », audit                                                                                                                                                                              | Matrice de transitions testée exhaustivement ; PENDING sans effet sur soldes                                             |
-| **8** Remboursements               | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
+| **8** Remboursements ✅            | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
 | **9** Cycle de vie                 | OPEN/SETTLEMENT/CLOSED, réouverture motivée, badge d'état, rotation du lien participant, gestion des admins                                                                                                                                                      | Matrice état × action testée ; clôture refusée si PENDING                                                                |
 | **10** Admin desktop               | Layout `lg`, table dense (filtres, recherche, tri, sélection multiple), édition inline + panneau, audit, paramètres                                                                                                                                              | Parcours trésorier complet sur desktop                                                                                   |
 | **11** Durcissement                | Tests API d'isolation sur toutes les routes, en-têtes/CSP, rate limits, Playwright mobile (parcours clés), accessibilité, perf, `docker-compose.prod.yml`, sauvegardes, doc d'exploitation                                                                       | Revue sécurité OK ; Lighthouse mobile ≥ 90                                                                               |
 
-> 🟡 Phase 1 : tout est vérifié localement (lint, types, 50 tests, build, migrations, API + front lancés) **sauf** `docker compose up`
-> et la CI GitHub — Docker n'est pas installé sur la machine de dev et le dépôt n'a pas de remote. La CI les vérifiera au premier push.
+> 🟡 Phase 1 : tout est vérifié localement (lint, types, 50 tests, build, migrations, API + front lancés) sauf `docker compose up` lui-même
+> (Docker absent de la machine de dev). Depuis le 2026-11-08, la CI GitHub est verte : lint, types, tests, build, construction des deux images Docker, validation du Caddyfile et des fichiers Compose.
 
 > ✅ Phase 2 : création, liens participant/admin (hachés ; participant aussi chiffré, D17), authentification par en-tête,
 > `/me`, `/nikount`, `/nikount/participant-link`, audit append-only, limites (créations par IP, tokens invalides par IP),
@@ -57,6 +57,13 @@
 > bandeau « N opérations à valider », file de validation avec « Valider tout » confirmé, actions sur le détail (refus
 > et annulation avec motif et confirmation), invisibles pour les participants et une fois le nikount clôturé.
 > 417 tests ; vérifié dans le navigateur (validation puis annulation, soldes recalculés).
+
+> ✅ Phase 8 : formulaire de remboursement (« qui rembourse → à qui », montant, libellé, date, résumé de l’effet),
+> pré-rempli depuis un virement suggéré (`?from=&to=&amount=`, valeurs incohérentes ignorées) ; virements suggérés
+> cliquables (sauf avec un participant désactivé ou nikount clôturé) ; boutons « + Ajouter une dépense » et
+> « 💸 Remboursement » l’un sous l’autre ; onglet Remboursements avec bouton d’enregistrement ; en phase de règlement,
+> dépenses fermées et message explicatif. Participant → en attente (D3), admin → validé. 434 tests ; vérifié dans le
+> navigateur (virement suggéré → remboursement → validation → solde à zéro).
 
 ## Stratégie de tests
 

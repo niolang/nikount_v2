@@ -3,7 +3,7 @@
 Gestion des dépenses partagées entre amis, groupes et associations — 100 % navigateur, sans compte.
 **Un événement = un nikount = un lien privé.**
 
-> Phases 0 (conception), 1 (socle), 2 (création et accès par lien), 3 (participants), 4 (opérations et répartitions), 5 (soldes), 6 (historique) et 7 (validation) en place — voir [docs/roadmap.md](docs/roadmap.md).
+> Phases 0 (conception), 1 (socle), 2 (création et accès par lien), 3 (participants), 4 (opérations et répartitions), 5 (soldes), 6 (historique), 7 (validation) et 8 (remboursements) en place — voir [docs/roadmap.md](docs/roadmap.md).
 
 - [Tester en local](#tester-en-local)
 - [Déployer en production](#déployer-en-production)
@@ -184,8 +184,8 @@ docker compose -f docker-compose.prod.yml start api
 - Les journaux de Caddy et de l'API ne contiennent jamais les liens d'accès : on peut les
   transmettre pour un diagnostic.
 
-> État : les images Docker sont construites et vérifiées par la CI GitHub à chaque push. Le
-> déploiement de production n'a pas encore été éprouvé sur un vrai serveur (prévu en Phase 11).
+> État : à chaque push, la CI GitHub construit les deux images Docker et valide le Caddyfile et
+> les fichiers Compose. Le déploiement n'a pas encore été éprouvé sur un vrai serveur (Phase 11).
 
 ---
 

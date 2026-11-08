@@ -1,4 +1,5 @@
 import type { BalancesResponse, NikountState, ParticipantView } from '@nikount/contracts';
+import { Link } from 'react-router';
 import { Card } from '../../components/ui';
 import { formatMoney } from '../../lib/format';
 
@@ -12,12 +13,15 @@ export function BalancesCard({
   currentId,
   currency,
   state,
+  reimbursementPath = null,
 }: {
   balances: BalancesResponse;
   participants: ParticipantView[];
   currentId: string | null;
   currency: string;
   state: NikountState;
+  /** Chemin du formulaire de remboursement ; null si les remboursements sont impossibles. */
+  reimbursementPath?: string | null;
 }) {
   const byId = new Map(participants.map((p) => [p.id, p]));
   const name = (id: string) => {
@@ -96,15 +100,45 @@ export function BalancesCard({
             {balances.settlementSuggestions.length > 1 ? 's' : ''})
           </summary>
           <ul className="mt-2 space-y-1">
-            {balances.settlementSuggestions.map((t) => (
-              <li key={`${t.from}-${t.to}`} className="flex justify-between gap-2">
-                <span className="min-w-0 truncate">
-                  {name(t.from)} → {name(t.to)}
-                </span>
-                <span className="tabular font-semibold">{money(t.amount)}</span>
-              </li>
-            ))}
+            {balances.settlementSuggestions.map((t) => {
+              const label = (
+                <>
+                  <span className="min-w-0 truncate">
+                    {name(t.from)} → {name(t.to)}
+                  </span>
+                  <span className="tabular font-semibold">{money(t.amount)}</span>
+                </>
+              );
+              // Un participant désactivé ne peut plus être payeur ni bénéficiaire : pas de lien.
+              const recordable =
+                reimbursementPath !== null &&
+                Boolean(byId.get(t.from)?.isActive) &&
+                Boolean(byId.get(t.to)?.isActive);
+              return (
+                <li key={`${t.from}-${t.to}`}>
+                  {recordable ? (
+                    <Link
+                      to={`${reimbursementPath}?from=${t.from}&to=${t.to}&amount=${String(t.amount)}`}
+                      aria-label={`Enregistrer le remboursement de ${name(t.from)} à ${name(t.to)}`}
+                      className="-mx-2 flex min-h-10 items-center justify-between gap-2 rounded-lg px-2 hover:bg-brand-50"
+                    >
+                      {label}
+                      <span className="text-brand-700" aria-hidden="true">
+                        ›
+                      </span>
+                    </Link>
+                  ) : (
+                    <div className="flex min-h-10 items-center justify-between gap-2">{label}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
+          {reimbursementPath !== null ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Touchez un virement pour l’enregistrer une fois effectué.
+            </p>
+          ) : null}
         </details>
       ) : null}
     </Card>

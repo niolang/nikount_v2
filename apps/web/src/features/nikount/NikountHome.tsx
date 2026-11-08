@@ -34,6 +34,9 @@ export function NikountHome({
   const canAddExpense =
     isActionAllowed('CREATE_EXPENSE', me.nikount.state) &&
     (participants.data ?? []).some((p) => p.isActive);
+  const canReimburse =
+    isActionAllowed('CREATE_REIMBURSEMENT', me.nikount.state) &&
+    (participants.data ?? []).filter((p) => p.isActive).length >= 2;
   const flash = (useLocation().state as { flash?: string } | null)?.flash;
 
   return (
@@ -78,6 +81,7 @@ export function NikountHome({
               currentId={identity.current?.id ?? null}
               currency={me.nikount.currency}
               state={me.nikount.state}
+              reimbursementPath={canReimburse ? `${basePath}/reimbursements/new` : null}
             />
           ) : balances.isError ? (
             <p role="alert" className="mt-6 rounded-xl bg-red-50 p-3 text-sm text-red-700">
@@ -98,13 +102,37 @@ export function NikountHome({
             </Link>
           ) : null}
 
-          {canAddExpense ? (
-            <Link
-              to={`${basePath}/expenses/new`}
-              className="mt-6 flex min-h-14 items-center justify-center rounded-2xl bg-brand-700 px-6 text-lg font-semibold text-white shadow-sm hover:bg-brand-800"
-            >
-              + Ajouter une dépense
-            </Link>
+          {me.nikount.state === 'SETTLEMENT' ? (
+            <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+              Événement terminé : les nouvelles dépenses sont fermées, il ne reste qu’à solder les
+              comptes par des remboursements.
+            </p>
+          ) : null}
+
+          {canAddExpense || canReimburse ? (
+            // L'un sous l'autre, comme la maquette : lisibles à une main sur un petit écran.
+            <div className="mt-6 flex flex-col gap-3">
+              {canAddExpense ? (
+                <Link
+                  to={`${basePath}/expenses/new`}
+                  className="flex min-h-14 items-center justify-center rounded-2xl bg-brand-700 px-4 text-lg font-semibold text-white shadow-sm hover:bg-brand-800"
+                >
+                  + Ajouter une dépense
+                </Link>
+              ) : null}
+              {canReimburse ? (
+                <Link
+                  to={`${basePath}/reimbursements/new`}
+                  className={`flex min-h-12 items-center justify-center rounded-2xl px-4 font-semibold shadow-sm ${
+                    canAddExpense
+                      ? 'bg-white text-brand-800 ring-1 ring-brand-700/30 hover:bg-brand-50'
+                      : 'bg-brand-700 text-lg text-white hover:bg-brand-800'
+                  }`}
+                >
+                  💸 Remboursement
+                </Link>
+              ) : null}
+            </div>
           ) : null}
 
           <RecentTransactions
