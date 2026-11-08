@@ -3,7 +3,7 @@
 Gestion des dépenses partagées entre amis, groupes et associations — 100 % navigateur, sans compte.
 **Un événement = un nikount = un lien privé.**
 
-> Phase 0 (conception) terminée. Phase 1 (socle) en place — voir [docs/roadmap.md](docs/roadmap.md).
+> Phases 0 (conception), 1 (socle) et 2 (création et accès par lien) en place — voir [docs/roadmap.md](docs/roadmap.md).
 
 ## Démarrer
 
@@ -17,7 +17,8 @@ cp .env.example .env
 ### Option A — sans Docker (PGlite)
 
 [PGlite](https://pglite.dev) est un vrai PostgreSQL 17 embarqué, exposé sur le port 5433.
-Dans `.env`, régler `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/postgres`.
+Dans `.env`, régler `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/postgres` et
+`TOKEN_ENCRYPTION_KEY` (commande de génération dans `.env.example`).
 
 ```bash
 pnpm --filter @nikount/api db:local        # terminal 1 : base locale (données dans .data/)

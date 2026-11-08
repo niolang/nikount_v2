@@ -1,11 +1,11 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { isDatabaseUp } from '../src/db/client.js';
-import { nikount } from '../src/db/schema.js';
-import { createTestDatabase } from './helpers.js';
+import { auditEvent, nikount } from '../src/db/schema.js';
+import { createTestDatabase, type TestDatabase } from './helpers.js';
 
-let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
+let testDb: TestDatabase;
 
 beforeAll(async () => {
   testDb = await createTestDatabase();
@@ -15,7 +15,26 @@ afterAll(async () => {
   await testDb.close();
 });
 
+/** Drizzle enveloppe l'erreur PostgreSQL : le message du moteur est dans `cause`. */
+async function expectDatabaseError(query: PromiseLike<unknown>, pattern: RegExp): Promise<void> {
+  try {
+    await query;
+  } catch (error) {
+    const cause = (error as { cause?: { message?: string } }).cause;
+    expect(cause?.message ?? String(error)).toMatch(pattern);
+    return;
+  }
+  expect.fail('La requête aurait dû être refusée par la base');
+}
+
 const tokenHash = () => createHash('sha256').update(randomUUID()).digest();
+const newNikount = (overrides: Partial<typeof nikount.$inferInsert> = {}) => ({
+  id: randomUUID(),
+  name: 'Test',
+  participantTokenHash: tokenHash(),
+  participantTokenCiphertext: randomBytes(50),
+  ...overrides,
+});
 
 describe('migrations (PostgreSQL via PGlite)', () => {
   it('s’appliquent et la base répond', async () => {
@@ -23,12 +42,10 @@ describe('migrations (PostgreSQL via PGlite)', () => {
   });
 
   it('crée un nikount avec les valeurs par défaut attendues', async () => {
-    const id = randomUUID();
-    await testDb.db
-      .insert(nikount)
-      .values({ id, name: 'Weekend Chamonix', participantTokenHash: tokenHash() });
+    const values = newNikount({ name: 'Weekend Chamonix' });
+    await testDb.db.insert(nikount).values(values);
 
-    const [row] = await testDb.db.select().from(nikount).where(eq(nikount.id, id));
+    const [row] = await testDb.db.select().from(nikount).where(eq(nikount.id, values.id));
     expect(row).toMatchObject({
       name: 'Weekend Chamonix',
       currency: 'EUR',
@@ -44,20 +61,52 @@ describe('migrations (PostgreSQL via PGlite)', () => {
     ['devise invalide', { currency: 'eur' }],
     ['hash de token de mauvaise taille', { participantTokenHash: new Uint8Array(16) }],
   ])('refuse : %s', async (_label, override) => {
-    await expect(
-      testDb.db
-        .insert(nikount)
-        .values({ id: randomUUID(), name: 'Test', participantTokenHash: tokenHash(), ...override }),
-    ).rejects.toThrow();
+    await expect(testDb.db.insert(nikount).values(newNikount(override))).rejects.toThrow();
   });
 
   it('refuse deux nikounts avec le même token participant', async () => {
     const hash = tokenHash();
-    await testDb.db
-      .insert(nikount)
-      .values({ id: randomUUID(), name: 'A', participantTokenHash: hash });
+    await testDb.db.insert(nikount).values(newNikount({ participantTokenHash: hash }));
     await expect(
-      testDb.db.insert(nikount).values({ id: randomUUID(), name: 'B', participantTokenHash: hash }),
+      testDb.db.insert(nikount).values(newNikount({ participantTokenHash: hash })),
+    ).rejects.toThrow();
+  });
+});
+
+describe('journal d’audit append-only', () => {
+  it('refuse toute modification, suppression ou vidage', async () => {
+    const values = newNikount();
+    await testDb.db.insert(nikount).values(values);
+    await testDb.db.insert(auditEvent).values({
+      nikountId: values.id,
+      actorKind: 'SYSTEM',
+      action: 'test.done',
+    });
+
+    await expectDatabaseError(
+      testDb.db
+        .update(auditEvent)
+        .set({ action: 'falsifié' })
+        .where(eq(auditEvent.nikountId, values.id)),
+      /ajout seul \(UPDATE interdit\)/,
+    );
+    await expectDatabaseError(
+      testDb.db.delete(auditEvent).where(eq(auditEvent.nikountId, values.id)),
+      /ajout seul \(DELETE interdit\)/,
+    );
+    await expectDatabaseError(
+      testDb.db.execute(sql`truncate audit_event`),
+      /ajout seul \(TRUNCATE interdit\)/,
+    );
+  });
+
+  it('exige un admin pour une action d’admin', async () => {
+    const values = newNikount();
+    await testDb.db.insert(nikount).values(values);
+    await expect(
+      testDb.db
+        .insert(auditEvent)
+        .values({ nikountId: values.id, actorKind: 'ADMIN', action: 'x.y' }),
     ).rejects.toThrow();
   });
 });

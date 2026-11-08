@@ -32,6 +32,10 @@ export const TRANSACTION_CATEGORIES = [
 export const TransactionCategory = z.enum(TRANSACTION_CATEGORIES);
 export type TransactionCategory = z.infer<typeof TransactionCategory>;
 
+export const ACTOR_KINDS = ['ADMIN', 'PARTICIPANT', 'SYSTEM'] as const;
+export const ActorKind = z.enum(ACTOR_KINDS);
+export type ActorKind = z.infer<typeof ActorKind>;
+
 export const ACCESS_ROLES = ['PARTICIPANT', 'ADMIN'] as const;
 export const AccessRole = z.enum(ACCESS_ROLES);
 export type AccessRole = z.infer<typeof AccessRole>;

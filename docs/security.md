@@ -19,7 +19,7 @@
 
 - Générés par `crypto.randomBytes(16)` (participant, 128 bits) et `crypto.randomBytes(32)` (admin, 256 bits),
   encodés en base64url. Préfixe lisible non secret pour distinguer les types côté support (`p_…` / `a_…`).
-- Stockés uniquement sous forme `sha256(token)` ; un dump de la base ne donne aucun accès.
+- Recherche par `sha256(token)` uniquement. Le lien admin n'est stocké que sous cette forme. Le lien participant est en plus stocké **chiffré** (AES-256-GCM, clé `TOKEN_ENCRYPTION_KEY` hors base) pour que les admins puissent le réafficher (D17) : un dump de la base seule ne donne aucun accès. Perdre la clé rend les liens participants non réaffichables (ils restent valides).
   (Pas besoin de bcrypt/argon2 : l'entropie du token rend la force brute hors d'atteinte.)
 - Recherche par index sur le hash → pas de comparaison caractère par caractère exploitable.
 - **Séparation stricte** : un token participant ne résout jamais vers un rôle admin ; aucun endpoint ne

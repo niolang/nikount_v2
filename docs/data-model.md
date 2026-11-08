@@ -25,18 +25,19 @@ nikount 1───* participant
 
 ### `nikount`
 
-| Colonne                      | Type                 | Notes                                                            |
-| ---------------------------- | -------------------- | ---------------------------------------------------------------- |
-| id                           | uuid PK              |                                                                  |
-| name                         | text                 | 1–60 car.                                                        |
-| currency                     | char(3)              | `EUR` par défaut, immuable après la 1re opération                |
-| timezone                     | text                 | `Europe/Paris` par défaut (pour « aujourd'hui »)                 |
-| state                        | enum `nikount_state` | `OPEN` \| `SETTLEMENT` \| `CLOSED`                               |
-| state_changed_at             | timestamptz          |                                                                  |
-| participant_token_hash       | bytea UNIQUE         | `sha256(token)` — le token en clair n'est **jamais** stocké 🔶D1 |
-| participant_token_rotated_at | timestamptz          |                                                                  |
-| version                      | int                  |                                                                  |
-| created_at, updated_at       | timestamptz          |                                                                  |
+| Colonne                      | Type                 | Notes                                                                                         |
+| ---------------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| id                           | uuid PK              |                                                                                               |
+| name                         | text                 | 1–60 car.                                                                                     |
+| currency                     | char(3)              | `EUR` par défaut, immuable après la 1re opération                                             |
+| timezone                     | text                 | `Europe/Paris` par défaut (pour « aujourd'hui »)                                              |
+| state                        | enum `nikount_state` | `OPEN` \| `SETTLEMENT` \| `CLOSED`                                                            |
+| state_changed_at             | timestamptz          |                                                                                               |
+| participant_token_hash       | bytea UNIQUE         | `sha256(token)` — le token en clair n'est **jamais** stocké 🔶D1                              |
+| participant_token_ciphertext | bytea                | Token chiffré AES-256-GCM (iv ‖ tag ‖ chiffré), contexte = id du nikount, clé hors base 🔶D17 |
+| participant_token_rotated_at | timestamptz          |                                                                                               |
+| version                      | int                  |                                                                                               |
+| created_at, updated_at       | timestamptz          |                                                                                               |
 
 ### `participant`
 
@@ -55,17 +56,17 @@ nikount 1───* participant
 Un lien admin = une ligne. Permet plusieurs admins, la révocation individuelle et l'attribution
 nominative des actions.
 
-| Colonne             | Type             | Notes                                                                                   |
-| ------------------- | ---------------- | --------------------------------------------------------------------------------------- |
-| id                  | uuid PK          |                                                                                         |
-| nikount_id          | uuid FK          |                                                                                         |
-| label               | text             | Nom affiché (« Nicolas »)                                                               |
-| participant_id      | uuid NULL        | FK composite ; lien optionnel vers un participant (un trésorier peut ne pas participer) |
-| token_hash          | bytea UNIQUE     | `sha256(token)`                                                                         |
-| created_by_admin_id | uuid NULL        | NULL pour le créateur du nikount                                                        |
-| revoked_at          | timestamptz NULL | Révoqué = refusé immédiatement                                                          |
-| last_used_at        | timestamptz NULL | Mis à jour au plus 1×/min                                                               |
-| created_at          | timestamptz      |                                                                                         |
+| Colonne             | Type             | Notes                                                                                                                                     |
+| ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| id                  | uuid PK          |                                                                                                                                           |
+| nikount_id          | uuid FK          |                                                                                                                                           |
+| label               | text             | Nom affiché (« Nicolas »)                                                                                                                 |
+| participant_id      | uuid NULL        | _(ajouté en Phase 3 avec la table `participant`)_ FK composite ; lien optionnel vers un participant (un trésorier peut ne pas participer) |
+| token_hash          | bytea UNIQUE     | `sha256(token)`                                                                                                                           |
+| created_by_admin_id | uuid NULL        | NULL pour le créateur du nikount                                                                                                          |
+| revoked_at          | timestamptz NULL | Révoqué = refusé immédiatement                                                                                                            |
+| last_used_at        | timestamptz NULL | Mis à jour au plus 1×/min                                                                                                                 |
+| created_at          | timestamptz      |                                                                                                                                           |
 
 Règle : il reste toujours **au moins un accès admin non révoqué** (on ne peut pas révoquer le dernier).
 

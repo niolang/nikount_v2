@@ -44,10 +44,10 @@ Légende rôle : **P** participant, **A** admin, **—** public.
 
 ### Public
 
-| Méthode | Route       | Rôle | Description                                                                                                                                                                                         |
-| ------- | ----------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/health`   | —    | Santé (inclut la connexion DB)                                                                                                                                                                      |
-| POST    | `/nikounts` | —    | Crée un nikount. Corps : `name`, `currency?`, `adminLabel`, `participants[]` (noms), `adminIsParticipant?`. Réponse **unique** contenant `participantToken` et `adminToken` (jamais ré-affichables) |
+| Méthode | Route       | Rôle | Description                                                                                                                                                                                                                                                   |
+| ------- | ----------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/health`   | —    | Santé (inclut la connexion DB)                                                                                                                                                                                                                                |
+| POST    | `/nikounts` | —    | Crée un nikount. Corps : `name`, `currency?` (ISO 4217, `EUR` par défaut), `adminLabel`. Réponse **unique** contenant `participantToken` et `adminToken`. Limité à `RATE_LIMIT_CREATE_PER_HOUR` par IP. _(Phase 3 : `participants[]`, `adminIsParticipant?`)_ |
 
 ### Contexte
 
@@ -58,6 +58,7 @@ Légende rôle : **P** participant, **A** admin, **—** public.
 | PATCH   | `/nikount`                         | A    | `name`, `timezone`, `version`                                            |
 | POST    | `/nikount/state`                   | A    | `{ to, reason?, version }` — transitions de [product.md §4](product.md)  |
 | POST    | `/nikount/participant-link/rotate` | A    | Invalide l'ancien lien participant, renvoie le nouveau token             |
+| GET     | `/nikount/participant-link`        | A    | Réaffiche le lien participant (token déchiffré, D17)                     |
 
 ### Participants
 

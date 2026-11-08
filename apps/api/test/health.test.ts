@@ -1,9 +1,18 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { ErrorResponse, HealthResponse } from '@nikount/contracts';
 import type { AppInstance } from '../src/lib/types.js';
-import { buildTestApp } from './helpers.js';
+import { buildTestApp, createTestDatabase, type TestDatabase } from './helpers.js';
 
+let testDb: TestDatabase;
 let app: AppInstance | undefined;
+
+beforeAll(async () => {
+  testDb = await createTestDatabase();
+});
+
+afterAll(async () => {
+  await testDb.close();
+});
 
 afterEach(async () => {
   await app?.close();
@@ -11,8 +20,8 @@ afterEach(async () => {
 });
 
 describe('GET /api/v1/health', () => {
-  it('répond 200 quand la base est disponible', async () => {
-    app = await buildTestApp({ checkDatabase: () => Promise.resolve(true) });
+  it('répond 200 quand la base est disponible (vraie base)', async () => {
+    app = await buildTestApp(testDb.db);
     const response = await app.inject({ method: 'GET', url: '/api/v1/health' });
 
     expect(response.statusCode).toBe(200);
@@ -20,7 +29,7 @@ describe('GET /api/v1/health', () => {
   });
 
   it('répond 503 quand la base est indisponible', async () => {
-    app = await buildTestApp({ checkDatabase: () => Promise.resolve(false) });
+    app = await buildTestApp(testDb.db, { checkDatabase: () => Promise.resolve(false) });
     const response = await app.inject({ method: 'GET', url: '/api/v1/health' });
 
     expect(response.statusCode).toBe(503);
@@ -28,14 +37,16 @@ describe('GET /api/v1/health', () => {
   });
 
   it('répond 503 si la vérification de la base lève une exception', async () => {
-    app = await buildTestApp({ checkDatabase: () => Promise.reject(new Error('boom')) });
+    app = await buildTestApp(testDb.db, {
+      checkDatabase: () => Promise.reject(new Error('boom')),
+    });
     const response = await app.inject({ method: 'GET', url: '/api/v1/health' });
 
     expect(response.statusCode).toBe(503);
   });
 
   it('renvoie un identifiant de requête généré par le serveur, jamais celui du client', async () => {
-    app = await buildTestApp();
+    app = await buildTestApp(testDb.db);
     const response = await app.inject({
       method: 'GET',
       url: '/api/v1/health',
@@ -47,19 +58,20 @@ describe('GET /api/v1/health', () => {
     expect(requestId).not.toBe('forged-by-client');
   });
 
-  it('pose les en-têtes de sécurité', async () => {
-    app = await buildTestApp();
+  it('pose les en-têtes de sécurité et interdit la mise en cache', async () => {
+    app = await buildTestApp(testDb.db);
     const response = await app.inject({ method: 'GET', url: '/api/v1/health' });
 
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['content-security-policy']).toContain("default-src 'none'");
+    expect(response.headers['cache-control']).toBe('no-store');
   });
 });
 
 describe('gestion des erreurs', () => {
   it('répond 404 au format standard sur une route inconnue', async () => {
-    app = await buildTestApp();
+    app = await buildTestApp(testDb.db);
     const response = await app.inject({ method: 'GET', url: '/api/v1/inexistant' });
 
     expect(response.statusCode).toBe(404);
@@ -69,11 +81,10 @@ describe('gestion des erreurs', () => {
   });
 
   it('répond 400 au format standard sur un JSON invalide', async () => {
-    app = await buildTestApp();
-    app.post('/api/v1/echo', async () => ({ ok: true }));
+    app = await buildTestApp(testDb.db);
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/echo',
+      url: '/api/v1/nikounts',
       headers: { 'content-type': 'application/json' },
       payload: '{ invalide',
     });
@@ -83,7 +94,7 @@ describe('gestion des erreurs', () => {
   });
 
   it('masque le détail des erreurs inattendues', async () => {
-    app = await buildTestApp();
+    app = await buildTestApp(testDb.db);
     app.get('/api/v1/boom', async () => {
       throw new Error('secret interne');
     });

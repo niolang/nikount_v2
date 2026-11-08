@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+const EncryptionKey = z
+  .string()
+  .transform((value) => Buffer.from(value, 'base64'))
+  .refine((key) => key.length === 32, {
+    message:
+      "Clé de 32 octets en base64 attendue. Générer avec : node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+  });
+
 const EnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -13,6 +21,14 @@ const EnvSchema = z
     TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
     /** URL publique du front, utilisée pour construire les liens de partage. */
     PUBLIC_BASE_URL: z.url({ protocol: /^https?$/ }),
+    /** Clé de chiffrement des liens participants stockés en base (décision D17). */
+    TOKEN_ENCRYPTION_KEY: EncryptionKey,
+    /** Créations de nikount autorisées par IP et par heure. */
+    RATE_LIMIT_CREATE_PER_HOUR: z.coerce.number().int().min(1).default(10),
+    /** Tokens invalides tolérés par IP dans la fenêtre avant blocage. */
+    AUTH_FAILURE_MAX: z.coerce.number().int().min(1).default(20),
+    AUTH_FAILURE_WINDOW_MINUTES: z.coerce.number().int().min(1).default(10),
+    AUTH_FAILURE_BLOCK_MINUTES: z.coerce.number().int().min(1).default(15),
   })
   .refine((env) => env.NODE_ENV !== 'production' || env.PUBLIC_BASE_URL.startsWith('https://'), {
     message: 'PUBLIC_BASE_URL doit être en HTTPS en production',

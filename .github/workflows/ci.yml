@@ -41,7 +41,11 @@ jobs:
       - name: Valider le Caddyfile
         run: docker run --rm -e SITE_ADDRESS=localhost nikount-web caddy validate --config /etc/caddy/Caddyfile
       - name: Valider les fichiers Compose
+        env:
+          POSTGRES_PASSWORD: x
+          SITE_ADDRESS: localhost
+          PUBLIC_BASE_URL: https://localhost
+          TOKEN_ENCRYPTION_KEY: x
         run: |
-          POSTGRES_PASSWORD=x SITE_ADDRESS=localhost PUBLIC_BASE_URL=https://localhost \
-            docker compose -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.prod.yml config --quiet
           docker compose config --quiet

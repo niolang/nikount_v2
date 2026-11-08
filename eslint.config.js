@@ -27,6 +27,10 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
       '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
       // Les plugins et handlers Fastify sont async par contrat, même sans await.
       '@typescript-eslint/require-await': 'off',
       // Les commentaires en français contiennent des espaces insécables typographiques.

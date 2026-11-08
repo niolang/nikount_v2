@@ -49,6 +49,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TRUST_PROXY: '0'
       PUBLIC_BASE_URL: http://localhost:5173
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY est requis (voir .env.example)}
     ports:
       - '3000:3000'
     depends_on:

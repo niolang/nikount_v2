@@ -1,10 +1,10 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
-import { createDatabase, isDatabaseUp } from './db/client.js';
+import { createDatabase } from './db/client.js';
 
 const config = loadConfig();
 const database = createDatabase(config.DATABASE_URL);
-const app = await buildApp({ config, checkDatabase: () => isDatabaseUp(database.db) });
+const app = await buildApp({ config, db: database.db });
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'Arrêt en cours');
