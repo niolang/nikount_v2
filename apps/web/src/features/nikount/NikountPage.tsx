@@ -6,6 +6,7 @@ import { useMe } from '../../api/nikount';
 import { PageShell } from '../../components/ui';
 import { nikountPath } from '../../lib/links';
 import { forgetNikount, rememberNikount } from '../../lib/recent-nikounts';
+import { ReviewPage } from '../review/ReviewPage';
 import { ExpenseFormPage } from '../transactions/ExpenseFormPage';
 import { HistoryPage } from '../transactions/HistoryPage';
 import { TransactionDetailPage } from '../transactions/TransactionDetailPage';
@@ -72,6 +73,16 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
       <Route path="menu" element={withNav(<MenuPage {...props} />)} />
       <Route path="tx/:transactionId" element={withNav(<TransactionDetailPage {...props} />)} />
       <Route path="expenses/new" element={<ExpenseFormPage token={token} me={me} />} />
+      <Route
+        path="review"
+        element={
+          me.role === 'ADMIN' ? (
+            withNav(<ReviewPage {...props} />)
+          ) : (
+            <Navigate to={basePath} replace />
+          )
+        }
+      />
       <Route
         path="participants"
         element={

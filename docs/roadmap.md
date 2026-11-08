@@ -11,7 +11,7 @@
 | **4** Opérations + répartitions ✅ | `core/split.ts` **écrit en premier, test-first** ; tables `transaction`, `transaction_share`, `transaction_revision`, triggers ; `POST/GET /transactions` ; formulaire mobile avec prévisualisation                                                              | Tests de propriétés : Σ parts = montant pour tous modes ; trigger refuse une incohérence ; idempotence `clientRequestId` |
 | **5** Moteur comptable + soldes ✅ | `core/balances.ts` (soldes + suggestions), `GET /balances`, écran soldes « à recevoir / à payer », « qui paie la prochaine »                                                                                                                                     | Σ soldes = 0 (propriété) ; SQL ≡ moteur ; exemples du cahier des charges reproduits                                      |
 | **6** Historique ✅                | Liste groupée par jour, filtres, page détail (parts → montants), révisions                                                                                                                                                                                       | Opérations annulées/refusées visibles                                                                                    |
-| **7** Validation                   | Statuts, validate/reject/cancel, bulk tout-ou-rien, bannière « N à valider », audit                                                                                                                                                                              | Matrice de transitions testée exhaustivement ; PENDING sans effet sur soldes                                             |
+| **7** Validation ✅                | Statuts, validate/reject/cancel, bulk tout-ou-rien, bannière « N à valider », audit                                                                                                                                                                              | Matrice de transitions testée exhaustivement ; PENDING sans effet sur soldes                                             |
 | **8** Remboursements               | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
 | **9** Cycle de vie                 | OPEN/SETTLEMENT/CLOSED, réouverture motivée, badge d'état, rotation du lien participant, gestion des admins                                                                                                                                                      | Matrice état × action testée ; clôture refusée si PENDING                                                                |
 | **10** Admin desktop               | Layout `lg`, table dense (filtres, recherche, tri, sélection multiple), édition inline + panneau, audit, paramètres                                                                                                                                              | Parcours trésorier complet sur desktop                                                                                   |
@@ -51,6 +51,12 @@
 > refusées visibles (barrées) ; page détail (payeur, « 2 parts → 40 € », « 30 % → 36 € », mode, validation, refus ou
 > annulation avec motif, traçabilité des versions) ; `GET /transactions/:id/revisions`. Participants et lien
 > d’invitation déplacés dans « Menu ». 356 tests ; vérifié dans le navigateur.
+
+> ✅ Phase 7 : matrice des transitions dans `@nikount/core/transitions` (testée exhaustivement) ; `validate`, `reject`,
+> `cancel` et `bulk` (tout ou rien, verrouillage des lignes, conflit de version → 409, audit par opération). Front :
+> bandeau « N opérations à valider », file de validation avec « Valider tout » confirmé, actions sur le détail (refus
+> et annulation avec motif et confirmation), invisibles pour les participants et une fois le nikount clôturé.
+> 417 tests ; vérifié dans le navigateur (validation puis annulation, soldes recalculés).
 
 ## Stratégie de tests
 

@@ -139,3 +139,33 @@ export const TransactionListResponse = z.object({
 export type TransactionListResponse = z.infer<typeof TransactionListResponse>;
 
 export const TransactionIdParams = z.strictObject({ id: z.uuid() });
+
+// --- Changements de statut (docs/product.md §10) ---------------------------------------------
+
+const Reason = cleanText(1, 200);
+
+/**
+ * Valider, refuser ou annuler une opération. `version` (facultative) protège d'un changement
+ * concurrent : si elle ne correspond plus, la réponse est 409 VERSION_CONFLICT.
+ */
+export const StatusChangeRequest = z.preprocess(
+  // Corps absent (Fastify transmet null) : aucune option, ce qui suffit pour valider.
+  (body) => body ?? {},
+  z.strictObject({
+    reason: Reason.optional(),
+    version: z.number().int().min(1).optional(),
+  }),
+);
+export type StatusChangeRequest = z.input<typeof StatusChangeRequest>;
+
+export const BULK_STATUS_ACTIONS = ['validate', 'reject', 'cancel'] as const;
+export const BulkStatusAction = z.enum(BULK_STATUS_ACTIONS);
+export type BulkStatusAction = z.infer<typeof BulkStatusAction>;
+
+/** Action en masse, tout ou rien : si une opération ne peut pas changer, aucune ne change. */
+export const BulkStatusRequest = z.strictObject({
+  action: BulkStatusAction,
+  ids: z.array(z.uuid()).min(1).max(200),
+  reason: Reason.optional(),
+});
+export type BulkStatusRequest = z.input<typeof BulkStatusRequest>;

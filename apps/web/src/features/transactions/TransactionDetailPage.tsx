@@ -7,6 +7,7 @@ import type {
 } from '@nikount/contracts';
 import { ApiError } from '../../api/client';
 import { useParticipants } from '../../api/participants';
+import { StatusActions } from '../review/StatusActions';
 import { useTransaction, useTransactionRevisions } from '../../api/transactions';
 import { Card, PageShell } from '../../components/ui';
 import { CATEGORIES, transactionEmoji } from '../../lib/categories';
@@ -59,6 +60,7 @@ export function TransactionDetailPage({
       </Link>
       {transaction.data ? (
         <Detail
+          token={token}
           transaction={transaction.data}
           revisions={revisions.data ?? []}
           names={names}
@@ -80,11 +82,13 @@ export function TransactionDetailPage({
 }
 
 function Detail({
+  token,
   transaction: t,
   revisions,
   names,
   me,
 }: {
+  token: string;
   transaction: TransactionView;
   revisions: TransactionRevisionView[];
   names: Map<string, string>;
@@ -119,6 +123,9 @@ function Detail({
       </header>
 
       <StatusPanel transaction={t} when={when} />
+      {me.role === 'ADMIN' ? (
+        <StatusActions adminToken={token} transaction={t} state={me.nikount.state} />
+      ) : null}
 
       <Card className="mt-4">
         <p>

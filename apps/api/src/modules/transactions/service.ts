@@ -7,11 +7,14 @@ import type {
 import {
   computeSplit,
   isActionAllowed,
+  isStatusActionAllowedInState,
+  nextStatus,
   SplitError,
   type ComputedShare,
   type DistributionInput,
+  type StatusAction,
 } from '@nikount/core';
-import type { AccessContext } from '../../auth/access.js';
+import type { AccessContext, AdminAccessContext } from '../../auth/access.js';
 import type { Database } from '../../db/client.js';
 import { isUniqueViolation } from '../../lib/db-errors.js';
 import { DomainError } from '../../lib/errors.js';
@@ -347,4 +350,140 @@ export async function createTransaction(
     }
     throw error;
   }
+}
+
+// --- Changements de statut -------------------------------------------------------------------
+
+const STATUS_ACTION_AUDIT: Record<StatusAction, string> = {
+  VALIDATE: 'transaction.validated',
+  REJECT: 'transaction.rejected',
+  CANCEL: 'transaction.cancelled',
+};
+
+function statusFields(
+  action: StatusAction,
+  adminId: string,
+  reason: string | null,
+  now: Date,
+): Partial<repo.TransactionRow> {
+  switch (action) {
+    case 'VALIDATE':
+      return { status: 'VALIDATED', validatedAt: now, validatedByAdminId: adminId };
+    case 'REJECT':
+      return {
+        status: 'REJECTED',
+        rejectedAt: now,
+        rejectedByAdminId: adminId,
+        rejectionReason: reason,
+      };
+    case 'CANCEL':
+      return {
+        status: 'CANCELLED',
+        cancelledAt: now,
+        cancelledByAdminId: adminId,
+        cancellationReason: reason,
+      };
+  }
+}
+
+/**
+ * Valide, refuse ou annule une ou plusieurs opérations, en TOUT OU RIEN : si l'une d'elles est
+ * introuvable, déjà dans un statut incompatible ou modifiée entre-temps, aucune ne change.
+ * Réservé aux admins. Une opération n'est jamais supprimée : annuler la garde dans l'historique.
+ */
+export async function changeStatus(
+  db: Database,
+  access: AdminAccessContext,
+  transactionIds: string[],
+  action: StatusAction,
+  options: { reason?: string | undefined; version?: number | undefined },
+  meta: RequestMeta,
+): Promise<TransactionView[]> {
+  const ids = [...new Set(transactionIds)];
+  const reason = action === 'VALIDATE' ? null : (options.reason ?? null);
+
+  await db.transaction(async (tx) => {
+    const nikount = await getNikount(tx, access.nikountId);
+    if (!isStatusActionAllowedInState(action, nikount.state)) {
+      throw new DomainError(
+        409,
+        'INVALID_STATE',
+        'Ce nikount est clôturé : plus aucun changement.',
+        {
+          state: nikount.state,
+        },
+      );
+    }
+
+    const rows = await repo.lockTransactions(tx, access.nikountId, ids);
+    const found = new Set(rows.map((r) => r.id));
+    const missing = ids.filter((id) => !found.has(id));
+    if (missing.length > 0) {
+      throw new DomainError(404, 'NOT_FOUND', 'Ressource introuvable.', { ids: missing });
+    }
+
+    if (options.version !== undefined) {
+      const stale = rows.filter((r) => r.version !== options.version);
+      if (stale.length > 0) {
+        throw new DomainError(
+          409,
+          'VERSION_CONFLICT',
+          'Cette opération a été modifiée entre-temps.',
+          {
+            currentVersion: stale[0]?.version,
+          },
+        );
+      }
+    }
+
+    const blocked = rows.filter((r) => nextStatus(r.status, action) === null);
+    if (blocked.length > 0) {
+      throw new DomainError(
+        409,
+        'INVALID_STATUS_TRANSITION',
+        'Ce changement de statut n’est pas possible pour au moins une opération.',
+        { transactions: blocked.map((r) => ({ id: r.id, status: r.status })) },
+      );
+    }
+
+    const now = new Date();
+    for (const row of rows) {
+      const updated = await repo.updateStatus(
+        tx,
+        access.nikountId,
+        row,
+        statusFields(action, access.adminId, reason, now),
+      );
+      if (!updated) {
+        throw new DomainError(
+          409,
+          'VERSION_CONFLICT',
+          'Cette opération a été modifiée entre-temps.',
+        );
+      }
+      await recordAuditEvent(tx, {
+        nikountId: access.nikountId,
+        actorKind: 'ADMIN',
+        actorAdminId: access.adminId,
+        action: STATUS_ACTION_AUDIT[action],
+        entityType: 'transaction',
+        entityId: row.id,
+        data: {
+          from: row.status,
+          to: updated.status,
+          ...(reason ? { reason } : {}),
+          ...(ids.length > 1 ? { bulk: true, count: ids.length } : {}),
+        },
+        requestId: meta.requestId,
+      });
+    }
+  });
+
+  const views = await viewsOf(
+    db,
+    access.nikountId,
+    await repo.findTransactions(db, access.nikountId, ids),
+  );
+  const byId = new Map(views.map((v) => [v.id, v]));
+  return ids.map((id) => byId.get(id)).filter((v): v is TransactionView => v !== undefined);
 }

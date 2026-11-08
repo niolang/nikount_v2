@@ -70,3 +70,61 @@ export function useCreateTransaction(token: string) {
       ]),
   });
 }
+
+export type StatusActionPath = 'validate' | 'reject' | 'cancel';
+
+/** Rafraîchit tout ce qu'un changement de statut peut modifier : historique, détail, soldes. */
+function useRefreshAfterStatusChange(token: string) {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: transactionKeys.list(token) }),
+      queryClient.invalidateQueries({ queryKey: balanceKeys.all(token) }),
+    ]);
+}
+
+/** Valider, refuser ou annuler une opération (admin). */
+export function useChangeStatus(adminToken: string) {
+  const refresh = useRefreshAfterStatusChange(adminToken);
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      reason,
+      version,
+    }: {
+      id: string;
+      action: StatusActionPath;
+      reason?: string;
+      version?: number;
+    }) =>
+      apiRequest({
+        path: `/transactions/${id}/${action}`,
+        method: 'POST',
+        token: adminToken,
+        body: {
+          ...(reason ? { reason } : {}),
+          ...(version !== undefined ? { version } : {}),
+        },
+        schema: TransactionView,
+      }),
+    // Succès ou conflit : on repart de l'état du serveur.
+    onSettled: refresh,
+  });
+}
+
+/** Action en masse, tout ou rien (admin). */
+export function useBulkStatus(adminToken: string) {
+  const refresh = useRefreshAfterStatusChange(adminToken);
+  return useMutation({
+    mutationFn: (body: { action: StatusActionPath; ids: string[]; reason?: string }) =>
+      apiRequest({
+        path: '/transactions/bulk',
+        method: 'POST',
+        token: adminToken,
+        body,
+        schema: TransactionListResponse,
+      }),
+    onSettled: refresh,
+  });
+}

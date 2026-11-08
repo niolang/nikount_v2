@@ -133,3 +133,65 @@ export async function listRevisions(
     )
     .orderBy(asc(transactionRevision.revision));
 }
+
+/** Opérations données de CE nikount, verrouillées jusqu'à la fin de la transaction SQL. */
+export async function lockTransactions(
+  db: Database,
+  nikountId: string,
+  transactionIds: string[],
+): Promise<TransactionRow[]> {
+  if (transactionIds.length === 0) return [];
+  return db
+    .select()
+    .from(financialTransaction)
+    .where(
+      and(
+        eq(financialTransaction.nikountId, nikountId),
+        inArray(financialTransaction.id, transactionIds),
+      ),
+    )
+    .for('update');
+}
+
+/**
+ * Change le statut seulement si l'opération est toujours dans l'état lu (statut ET version) :
+ * `null` si quelqu'un l'a modifiée entre-temps.
+ */
+export async function updateStatus(
+  db: Database,
+  nikountId: string,
+  current: Pick<TransactionRow, 'id' | 'status' | 'version'>,
+  changes: Partial<typeof financialTransaction.$inferInsert>,
+): Promise<TransactionRow | null> {
+  const [row] = await db
+    .update(financialTransaction)
+    .set({ ...changes, version: current.version + 1, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financialTransaction.nikountId, nikountId),
+        eq(financialTransaction.id, current.id),
+        eq(financialTransaction.status, current.status),
+        eq(financialTransaction.version, current.version),
+      ),
+    )
+    .returning();
+  return row ?? null;
+}
+
+/** Opérations données de CE nikount (lecture simple, sans verrou). */
+export async function findTransactions(
+  db: Database,
+  nikountId: string,
+  transactionIds: string[],
+): Promise<TransactionRow[]> {
+  if (transactionIds.length === 0) return [];
+  return db
+    .select()
+    .from(financialTransaction)
+    .where(
+      and(
+        eq(financialTransaction.nikountId, nikountId),
+        inArray(financialTransaction.id, transactionIds),
+      ),
+    );
+}

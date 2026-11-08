@@ -85,6 +85,19 @@ export function NikountHome({
             </p>
           ) : null}
 
+          {isAdmin && balances.data && balances.data.pending.count > 0 ? (
+            <Link
+              to={`${basePath}/review`}
+              className="mt-4 flex items-center justify-between rounded-2xl bg-amber-100 px-4 py-3 font-semibold text-amber-900 ring-1 ring-amber-300"
+            >
+              <span>
+                ⏳ {balances.data.pending.count} opération
+                {balances.data.pending.count > 1 ? 's' : ''} à valider
+              </span>
+              <span aria-hidden="true">›</span>
+            </Link>
+          ) : null}
+
           {canAddExpense ? (
             <Link
               to={`${basePath}/expenses/new`}
