@@ -1,20 +1,51 @@
-# Production : PostgreSQL + API + Caddy (front statique, reverse proxy /api, HTTPS automatique).
+# Production : PostgreSQL + API + Caddy (front statique, reverse proxy /api, HTTPS automatique)
+# + sauvegarde quotidienne. Procédures complètes : docs/operations.md.
 #   docker compose -f docker-compose.prod.yml build
-#   docker compose -f docker-compose.prod.yml run --rm api node dist/db/migrate.js
+#   docker compose -f docker-compose.prod.yml up -d db
+#   docker compose -f docker-compose.prod.yml run --rm migrate
 #   docker compose -f docker-compose.prod.yml up -d
-# Variables requises dans .env : POSTGRES_PASSWORD, SITE_ADDRESS (ex. nikount.app), PUBLIC_BASE_URL.
+# Variables requises dans .env (voir .env.production.example).
 name: nikount
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    # Les journaux contiennent des IP : rotation courte (docs/security.md §9).
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '5'
+
+x-api-env: &api-env
+  NODE_ENV: production
+  API_HOST: 0.0.0.0
+  API_PORT: '3000'
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  TRUST_PROXY: '1'
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL est requis}
+  TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY est requis}
+  RATE_LIMIT_CREATE_PER_HOUR: ${RATE_LIMIT_CREATE_PER_HOUR:-10}
+  RATE_LIMIT_WRITES_PER_MINUTE: ${RATE_LIMIT_WRITES_PER_MINUTE:-60}
+  RATE_LIMIT_READS_PER_MINUTE: ${RATE_LIMIT_READS_PER_MINUTE:-300}
+  AUTH_FAILURE_MAX: ${AUTH_FAILURE_MAX:-20}
 
 services:
   db:
+    <<: *hardening
     image: postgres:17-alpine
-    restart: unless-stopped
     environment:
+      # Propriétaire du schéma : utilisé seulement par les migrations et les sauvegardes.
       POSTGRES_USER: ${POSTGRES_USER:-nikount}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est requis}
       POSTGRES_DB: ${POSTGRES_DB:-nikount}
+      # Rôle de l'API : lecture/écriture, aucun droit DDL (créé au premier démarrage).
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-nikount_app}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?POSTGRES_APP_PASSWORD est requis}
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
@@ -22,29 +53,50 @@ services:
       retries: 20
     # Aucun port publié : la base n'est joignable que depuis le réseau interne.
 
-  api:
+  # Tâche ponctuelle : `docker compose run --rm migrate` (à chaque mise à jour).
+  migrate:
+    <<: *hardening
+    restart: 'no'
+    profiles: [tools]
     build:
       context: .
       dockerfile: docker/api.Dockerfile
-    restart: unless-stopped
+    command: ['node', 'dist/db/migrate.js']
     environment:
-      NODE_ENV: production
-      API_HOST: 0.0.0.0
-      API_PORT: '3000'
+      <<: *api-env
       DATABASE_URL: postgres://${POSTGRES_USER:-nikount}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nikount}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      TRUST_PROXY: '1'
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL est requis}
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY est requis}
+      DATABASE_APP_ROLE: ${POSTGRES_APP_USER:-nikount_app}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      <<: *api-env
+      DATABASE_URL: postgres://${POSTGRES_APP_USER:-nikount_app}:${POSTGRES_APP_PASSWORD}@db:5432/${POSTGRES_DB:-nikount}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/v1/health']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       db:
         condition: service_healthy
 
   web:
+    <<: *hardening
     build:
       context: .
       dockerfile: docker/web.Dockerfile
-    restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS est requis}
     ports:
@@ -55,7 +107,28 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+
+  backup:
+    <<: *hardening
+    image: postgres:17-alpine
+    command: ['sh', '/usr/local/bin/backup.sh']
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-nikount}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-nikount}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_HOUR: ${BACKUP_HOUR:-03}
+    volumes:
+      - ./docker/backup.sh:/usr/local/bin/backup.sh:ro
+      # Dossier de l'hôte : à copier régulièrement HORS du serveur (docs/operations.md).
+      - ${BACKUP_HOST_DIR:-./backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   db-data:

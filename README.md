@@ -3,7 +3,7 @@
 Gestion des dépenses partagées entre amis, groupes et associations — 100 % navigateur, sans compte.
 **Un événement = un nikount = un lien privé.**
 
-> Phases 0 (conception), 1 (socle), 2 (création et accès par lien), 3 (participants), 4 (opérations et répartitions), 5 (soldes), 6 (historique), 7 (validation), 8 (remboursements), 9 (cycle de vie) et 10 (admin desktop) en place — voir [docs/roadmap.md](docs/roadmap.md).
+> Phases 0 (conception), 1 (socle), 2 (création et accès par lien), 3 (participants), 4 (opérations et répartitions), 5 (soldes), 6 (historique), 7 (validation), 8 (remboursements), 9 (cycle de vie), 10 (admin desktop) et 11 (durcissement) en place — voir [docs/roadmap.md](docs/roadmap.md).
 
 - [Tester en local](#tester-en-local)
 - [Déployer en production](#déployer-en-production)
@@ -80,9 +80,13 @@ Si le port 3000 est déjà pris, changer `API_PORT` **et** `VITE_API_PROXY_TARGE
 pnpm test        # moteur comptable, contrats, API (sur un vrai PostgreSQL en mémoire), écrans
 pnpm lint
 pnpm typecheck
+pnpm e2e         # parcours mobiles dans Chromium (Playwright) + audit d'accessibilité
 ```
 
-Aucun service à démarrer : les tests de l'API utilisent PGlite en mémoire.
+Aucun service à démarrer : les tests de l'API utilisent PGlite en mémoire ; `pnpm e2e` lance
+lui-même une API sur base en mémoire et le build de production du front (première fois :
+`pnpm --filter @nikount/e2e exec playwright install chromium`). Le test de clôture concurrente
+n'est exécuté que si `TEST_POSTGRES_URL` désigne un vrai PostgreSQL jetable (c'est le cas en CI).
 
 ---
 
@@ -118,12 +122,13 @@ cd /opt/nikount
 ```bash
 cp .env.production.example .env
 chmod 600 .env
-openssl rand -base64 32   # → POSTGRES_PASSWORD
+openssl rand -hex 24      # → POSTGRES_PASSWORD
+openssl rand -hex 24      # → POSTGRES_APP_PASSWORD (rôle de l'API, sans droits DDL)
 openssl rand -base64 32   # → TOKEN_ENCRYPTION_KEY
 ```
 
 Remplir `.env` : `SITE_ADDRESS` (ex. `nikount.example.org`), `PUBLIC_BASE_URL`
-(ex. `https://nikount.example.org`), `POSTGRES_PASSWORD`, `TOKEN_ENCRYPTION_KEY`.
+(ex. `https://nikount.example.org`) et les trois secrets.
 
 > **Sauvegarder `TOKEN_ENCRYPTION_KEY` hors du serveur** (gestionnaire de mots de passe).
 > Sans elle, les admins ne peuvent plus réafficher les liens du groupe (les liens restent valides).
@@ -131,61 +136,25 @@ Remplir `.env` : `SITE_ADDRESS` (ex. `nikount.example.org`), `PUBLIC_BASE_URL`
 ### 3. Construire, migrer, démarrer
 
 ```bash
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml run --rm api node dist/db/migrate.js
-docker compose -f docker-compose.prod.yml up -d
+alias dc='docker compose -f docker-compose.prod.yml'
+dc --profile tools build
+dc up -d --wait db
+dc run --rm migrate
+dc up -d --wait
+curl https://nikount.example.org/api/v1/health   # {"status":"ok","database":"up"}
 ```
 
-### 4. Vérifier
+Une sauvegarde de la base est faite chaque jour dans `./backups` (service `backup`) : **la copier
+hors du serveur**.
 
-```bash
-curl https://nikount.example.org/api/v1/health
-# {"status":"ok","database":"up"}
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f api
-```
+### Mettre à jour, sauvegarder, restaurer, surveiller
 
-Puis créer un nikount depuis le navigateur.
+Voir [docs/operations.md](docs/operations.md) : mise à jour, sauvegardes et restauration testée,
+surveillance, limites réglables, conduite à tenir en cas d'incident.
 
-### Mettre à jour
-
-```bash
-cd /opt/nikount
-git pull
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml run --rm api node dist/db/migrate.js
-docker compose -f docker-compose.prod.yml up -d
-```
-
-Les migrations sont versionnées et ne s'appliquent qu'une fois ; les relancer est sans effet.
-
-### Sauvegarder et restaurer la base
-
-Sauvegarde (à planifier chaque jour, ex. par cron, et à copier hors du serveur) :
-
-```bash
-docker compose -f docker-compose.prod.yml exec -T db \
-  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "nikount-$(date +%F).dump"
-```
-
-Restauration (sur une base vide, API arrêtée) :
-
-```bash
-docker compose -f docker-compose.prod.yml stop api
-docker compose -f docker-compose.prod.yml exec -T db \
-  sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < nikount-AAAA-MM-JJ.dump
-docker compose -f docker-compose.prod.yml start api
-```
-
-### Bonnes pratiques
-
-- Garder le système et Docker à jour ; n'exposer que les ports 80 et 443 (pare-feu).
-- Ne jamais versionner `.env` ; une clé `TOKEN_ENCRYPTION_KEY` différente par environnement.
-- Les journaux de Caddy et de l'API ne contiennent jamais les liens d'accès : on peut les
-  transmettre pour un diagnostic.
-
-> État : à chaque push, la CI GitHub construit les deux images Docker et valide le Caddyfile et
-> les fichiers Compose. Le déploiement n'a pas encore été éprouvé sur un vrai serveur (Phase 11).
+> État : à chaque push, la CI démarre la pile de production complète (base, migrations, API,
+> Caddy en HTTPS, sauvegarde), vérifie en-têtes et droits de la base, puis restaure une sauvegarde
+> dans une base vierge. Pas encore éprouvé sur un serveur public réel.
 
 ---
 
@@ -197,6 +166,7 @@ docker compose -f docker-compose.prod.yml start api
 | `pnpm test`                                    | Tous les tests (moteur, contrats, API sur PostgreSQL, web) |
 | `pnpm lint` · `pnpm typecheck` · `pnpm format` | Qualité                                                    |
 | `pnpm build`                                   | Build de production de tous les paquets                    |
+| `pnpm e2e`                                     | Parcours Playwright (mobile) + accessibilité (axe)         |
 | `pnpm --filter @nikount/api db:local`          | Base PostgreSQL locale (PGlite) sur le port 5433           |
 | `pnpm --filter @nikount/api db:migrate:dev`    | Applique les migrations en développement                   |
 | `pnpm --filter @nikount/api db:generate`       | Génère une migration SQL depuis `src/db/schema.ts`         |
@@ -209,7 +179,8 @@ apps/api            API Fastify (routes → services → repositories), Drizzle,
 apps/web            SPA React mobile-first (+ layout desktop admin)
 packages/core       Moteur comptable PUR : montants, répartitions, soldes, transitions
 packages/contracts  Schémas Zod partagés API ↔ front
-docker/             Dockerfiles, Caddyfile (prod)
+apps/e2e            Parcours de bout en bout (Playwright, axe-core)
+docker/             Dockerfiles, Caddyfile, init PostgreSQL, script de sauvegarde (prod)
 docs/               Conception
 ```
 
@@ -223,4 +194,5 @@ docs/               Conception
 | [docs/data-model.md](docs/data-model.md)     | Schéma PostgreSQL, invariants, calcul des soldes                |
 | [docs/api.md](docs/api.md)                   | Routes REST, authentification, erreurs                          |
 | [docs/security.md](docs/security.md)         | Modèle de menace, tokens, IDOR, CSP, rate limiting, audit       |
+| [docs/operations.md](docs/operations.md)     | Déploiement, mise à jour, sauvegardes, surveillance, incidents  |
 | [docs/roadmap.md](docs/roadmap.md)           | Phases 0 → 11, critères de fin, stratégie de tests              |

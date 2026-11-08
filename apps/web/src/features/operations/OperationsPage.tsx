@@ -766,9 +766,10 @@ function InlineEdit({
 
   if (draft === null) {
     return (
+      // Le nom accessible commence par le texte visible (WCAG 2.5.3) : « 28 sept. (modifier :
+      // Date de Essence) » se déclenche aussi à la voix en disant ce qui est affiché.
       <button
         type="button"
-        aria-label={`Modifier : ${label}`}
         title="Cliquer pour modifier"
         onClick={() => {
           cancelled.current = false;
@@ -777,6 +778,7 @@ function InlineEdit({
         className="-mx-1 rounded px-1 text-left hover:bg-slate-100 hover:ring-1 hover:ring-slate-300"
       >
         {display}
+        <span className="sr-only"> (modifier : {label})</span>
       </button>
     );
   }

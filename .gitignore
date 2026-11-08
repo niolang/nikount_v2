@@ -10,3 +10,6 @@ coverage/
 .DS_Store
 .vite/
 .data/
+backups/
+apps/e2e/test-results/
+apps/e2e/playwright-report/

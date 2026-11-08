@@ -25,6 +25,10 @@ const EnvSchema = z
     TOKEN_ENCRYPTION_KEY: EncryptionKey,
     /** Créations de nikount autorisées par IP et par heure. */
     RATE_LIMIT_CREATE_PER_HOUR: z.coerce.number().int().min(1).default(10),
+    /** Requêtes d'écriture (POST/PUT/PATCH) par lien d'accès et par minute. */
+    RATE_LIMIT_WRITES_PER_MINUTE: z.coerce.number().int().min(1).default(60),
+    /** Requêtes de lecture par lien d'accès et par minute. */
+    RATE_LIMIT_READS_PER_MINUTE: z.coerce.number().int().min(1).default(300),
     /** Tokens invalides tolérés par IP dans la fenêtre avant blocage. */
     AUTH_FAILURE_MAX: z.coerce.number().int().min(1).default(20),
     AUTH_FAILURE_WINDOW_MINUTES: z.coerce.number().int().min(1).default(10),

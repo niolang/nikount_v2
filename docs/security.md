@@ -43,7 +43,9 @@ Le lien `/n/<token>` est par nature dans l'historique du navigateur et les messa
 4. Chaque repository prend `nikountId` en **premier paramètre obligatoire** (typage).
 5. Les références croisées (payeur, concernés, admin lié) sont vérifiées par le service **et** par les FK composites.
 6. Matrice de permissions et d'états centralisée dans `@nikount/core/rules.ts`, testée exhaustivement.
-7. Test API générique : pour chaque route, un token du nikount B ne peut ni lire ni modifier une ressource du nikount A.
+7. Test API générique (`apps/api/test/isolation.test.ts`) : pour chaque route — la liste est relue depuis Fastify,
+   une route sans cas fait échouer le test —, un token du nikount B ne peut ni lire ni modifier une ressource du
+   nikount A, aucune donnée de A n’apparaît dans les réponses, et l’état de A reste identique.
 
 ## 4. Validation des données
 
@@ -59,7 +61,10 @@ Le lien `/n/<token>` est par nature dans l'historique du navigateur et les messa
 - **XSS** : rendu React (échappement par défaut), interdiction de `dangerouslySetInnerHTML` (règle ESLint),
   CSP : `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`.
 - En-têtes : `Strict-Transport-Security` (HSTS), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
-  `Permissions-Policy` restrictive.
+  `Permissions-Policy` restrictive, `Cross-Origin-Opener-Policy` et `Cross-Origin-Resource-Policy: same-origin`,
+  `X-Frame-Options: DENY`. Cartes de sources non servies en production.
+- La CSP est vérifiée en continu : `vite preview` sert les en-têtes du Caddyfile, et les tests Playwright échouent
+  sur toute violation (Zod est configuré en `jitless` pour ne jamais tenter `eval`).
 - HTTPS obligatoire en production (Caddy, redirection HTTP → HTTPS).
 
 ## 6. Sessions
@@ -70,12 +75,12 @@ l'entrée `localStorage` du nikount ; « Oublier ce nikount » la supprime. Rév
 
 ## 7. Rate limiting (`@fastify/rate-limit`, mémoire, instance unique)
 
-| Cible                   | Limite (proposition)             |
-| ----------------------- | -------------------------------- |
-| `POST /nikounts` par IP | 10 / heure                       |
-| Réponses `401` par IP   | 20 / 10 min, puis blocage 15 min |
-| Écritures par token     | 60 / min                         |
-| Lectures par token      | 300 / min                        |
+| Cible                   | Limite (réglable, docs/operations.md §6)                    |
+| ----------------------- | ----------------------------------------------------------- |
+| `POST /nikounts` par IP | 10 / heure                                                  |
+| Réponses `401` par IP   | 20 / 10 min, puis blocage 15 min                            |
+| Écritures par token     | 60 / min (lien du groupe, partagé : par lien **et** par IP) |
+| Lectures par token      | 300 / min (idem)                                            |
 
 `TRUST_PROXY` configuré pour lire la vraie IP derrière Caddy.
 
@@ -94,4 +99,7 @@ en base (IP seulement dans les logs, rétention courte). Politique de conservati
 
 - Secrets uniquement en variables d'environnement ; `.env` dans `.gitignore` ; `.env.example` sans valeur réelle.
 - `pnpm audit` + Dependabot/Renovate ; lockfile versionné ; images Docker épinglées, utilisateur non-root.
-- Rôle PostgreSQL applicatif sans droits DDL en production (migrations via un rôle séparé).
+- Rôle PostgreSQL applicatif sans droits DDL en production (migrations via le rôle propriétaire) : lecture,
+  insertion, mise à jour ; suppression des seules parts d’opération ; audit et révisions en ajout seul. Testé
+  (`apps/api/test/db-role.test.ts`) et vérifié par la CI sur la pile de production.
+- CI : `pnpm audit --prod --audit-level high` à chaque push ; Dependabot (npm, images Docker, actions).

@@ -15,7 +15,8 @@
     "db:generate": "pnpm --filter @nikount/contracts build && drizzle-kit generate",
     "db:migrate": "node dist/db/migrate.js",
     "db:migrate:dev": "tsx --env-file-if-exists=../../.env --conditions=@nikount/source src/db/migrate.ts",
-    "db:local": "node -e \"require('fs').mkdirSync('../../.data',{recursive:true})\" && pglite-server --db=../../.data/pglite --port=5433 --max-connections=10"
+    "db:local": "node -e \"require('fs').mkdirSync('../../.data',{recursive:true})\" && pglite-server --db=../../.data/pglite --port=5433 --max-connections=10",
+    "e2e:server": "tsx --conditions=@nikount/source test/e2e-server.ts"
   },
   "dependencies": {
     "@fastify/helmet": "^13.2.0",

@@ -20,6 +20,8 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     PUBLIC_BASE_URL: 'http://localhost:5173',
     TOKEN_ENCRYPTION_KEY: randomBytes(32),
     RATE_LIMIT_CREATE_PER_HOUR: 1000,
+    RATE_LIMIT_WRITES_PER_MINUTE: 100_000,
+    RATE_LIMIT_READS_PER_MINUTE: 100_000,
     AUTH_FAILURE_MAX: 1000,
     AUTH_FAILURE_WINDOW_MINUTES: 10,
     AUTH_FAILURE_BLOCK_MINUTES: 15,

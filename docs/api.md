@@ -35,7 +35,7 @@
 | 403  | `ADMIN_REQUIRED`                                                                                                                                                                                                                                                                         |
 | 404  | `NOT_FOUND`                                                                                                                                                                                                                                                                              |
 | 409  | `VERSION_CONFLICT`, `INVALID_STATE` (ex. dépense en `SETTLEMENT`), `INVALID_STATUS_TRANSITION`, `INVALID_STATE_TRANSITION`, `PENDING_REMAINING`, `LAST_ADMIN`, `ADMIN_LIMIT_REACHED`, `NOT_EDITABLE`                                                                                     |
-| 429  | `RATE_LIMITED`                                                                                                                                                                                                                                                                           |
+| 429  | `RATE_LIMITED` : créations de nikount par IP, liens invalides par IP, et par lien d’accès 60 écritures / 300 lectures par minute (lien du groupe : par lien et par IP)                                                                                                                   |
 | 500  | `INTERNAL_ERROR`                                                                                                                                                                                                                                                                         |
 
 ## 2. Routes

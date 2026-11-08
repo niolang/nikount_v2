@@ -4,21 +4,21 @@
 
 ## 1. Choix de la stack
 
-| Couche             | Choix                                                            | Pourquoi                                                                |
-| ------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Langage            | **TypeScript partout** (strict)                                  | Un seul langage, types partagés front/back                              |
-| Frontend           | React 19 + Vite 8 + TypeScript 6                                 | Demandé, écosystème standard                                            |
-| Style              | Tailwind CSS v4 + petits composants maison                       | Rapide, mobile-first, pas de lib UI lourde                              |
-| Routing            | React Router 8 (mode bibliothèque)                               | Simple, suffisant (pas de SSR)                                          |
-| État serveur       | TanStack Query                                                   | Cache, invalidation, états de chargement/erreur                         |
-| Formulaires        | React Hook Form + Zod                                            | Validation identique client/serveur                                     |
-| Backend            | **Node.js 26 LTS + Fastify 5**                                   | Rapide, typé, plugins sécurité (rate-limit, helmet), logs pino intégrés |
-| Validation         | **Zod** (schémas partagés) + `fastify-type-provider-zod`         | Une seule source de vérité des contrats, OpenAPI générée                |
-| ORM / SQL          | **Drizzle ORM** + drizzle-kit                                    | SQL explicite, typé, migrations SQL versionnées et lisibles             |
-| Base               | PostgreSQL 17 (PGlite en test et en local sans Docker)           | Demandé ; PGlite = vrai moteur PostgreSQL 17 embarqué, mêmes triggers   |
-| Tests              | Vitest (+ fast-check pour les propriétés), Playwright (Phase 11) | Même outil front/back                                                   |
-| Monorepo           | pnpm workspaces                                                  | Léger, pas besoin de Nx/Turborepo                                       |
-| Reverse proxy prod | Caddy                                                            | HTTPS automatique, en-têtes de sécurité, sert le front statique         |
+| Couche             | Choix                                                     | Pourquoi                                                                  |
+| ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Langage            | **TypeScript partout** (strict)                           | Un seul langage, types partagés front/back                                |
+| Frontend           | React 19 + Vite 8 + TypeScript 6                          | Demandé, écosystème standard                                              |
+| Style              | Tailwind CSS v4 + petits composants maison                | Rapide, mobile-first, pas de lib UI lourde                                |
+| Routing            | React Router 8 (mode bibliothèque)                        | Simple, suffisant (pas de SSR)                                            |
+| État serveur       | TanStack Query                                            | Cache, invalidation, états de chargement/erreur                           |
+| Formulaires        | React Hook Form + Zod                                     | Validation identique client/serveur                                       |
+| Backend            | **Node.js 26 LTS + Fastify 5**                            | Rapide, typé, plugins sécurité (rate-limit, helmet), logs pino intégrés   |
+| Validation         | **Zod** (schémas partagés) + `fastify-type-provider-zod`  | Une seule source de vérité des contrats, OpenAPI générée                  |
+| ORM / SQL          | **Drizzle ORM** + drizzle-kit                             | SQL explicite, typé, migrations SQL versionnées et lisibles               |
+| Base               | PostgreSQL 17 (PGlite en test et en local sans Docker)    | Demandé ; PGlite = vrai moteur PostgreSQL 17 embarqué, mêmes triggers     |
+| Tests              | Vitest (+ fast-check), Playwright + axe-core (`apps/e2e`) | Même outil front/back ; parcours et accessibilité dans un vrai navigateur |
+| Monorepo           | pnpm workspaces                                           | Léger, pas besoin de Nx/Turborepo                                         |
+| Reverse proxy prod | Caddy                                                     | HTTPS automatique, en-têtes de sécurité, sert le front statique           |
 
 ### Pourquoi Node + TypeScript plutôt que FastAPI
 
@@ -226,13 +226,14 @@ déclarée par nikount. Aucun autre état métier n'est persisté localement.
 ## 8. Déploiement
 
 - **Dev** : `docker compose up` → `db` (Postgres), `api` (tsx watch), `web` (Vite dev server, proxy `/api`).
-- **Prod** : `docker-compose.prod.yml` → `db`, `api` (image Node distroless/alpine, utilisateur non-root),
-  `web` (Caddy servant le build + proxy `/api` + TLS automatique).
-- Migrations exécutées par une commande dédiée (`pnpm --filter api db:migrate`) au démarrage du déploiement,
-  pas implicitement par chaque instance.
+- **Prod** : `docker-compose.prod.yml` → `db`, `api` (Node alpine, utilisateur non-root, système de fichiers
+  en lecture seule, rôle PostgreSQL sans DDL), `web` (Caddy servant le build + proxy `/api` + TLS automatique),
+  `backup` (pg_dump quotidien). Procédures : [operations.md](operations.md).
+- Migrations exécutées par un service dédié (`docker compose run --rm migrate`, rôle propriétaire) au
+  déploiement, pas implicitement par chaque instance ; elles réappliquent les droits du rôle applicatif.
 - Configuration par variables d'environnement (`DATABASE_URL`, `PUBLIC_BASE_URL`, `LOG_LEVEL`,
   `TRUST_PROXY`, `RATE_LIMIT_*`). `.env` ignoré par Git, `.env.example` versionné.
-- Sauvegardes : `pg_dump` quotidien (script fourni), à brancher sur le stockage de l'hébergeur.
+- Sauvegardes : service `backup` (`docker/backup.sh`), dump vérifié, rotation ; à copier hors du serveur.
 
 ## 9. Extensibilité prévue (sans coût au MVP)
 

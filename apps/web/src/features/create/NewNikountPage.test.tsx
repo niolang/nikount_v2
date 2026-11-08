@@ -23,6 +23,11 @@ const created = {
   adminToken: ADMIN_TOKEN,
 };
 
+/** L'écran de création est chargé à la demande. */
+async function formReady() {
+  await screen.findByRole('button', { name: 'Créer le nikount' });
+}
+
 function fillAndSubmit(name: string, adminLabel: string) {
   fireEvent.change(screen.getByLabelText('Nom de l’événement'), { target: { value: name } });
   fireEvent.change(screen.getByLabelText('Votre prénom'), { target: { value: adminLabel } });
@@ -30,9 +35,10 @@ function fillAndSubmit(name: string, adminLabel: string) {
 }
 
 describe('création d’un nikount', () => {
-  it('valide les champs avant tout appel à l’API', () => {
+  it('valide les champs avant tout appel à l’API', async () => {
     const fetchMock = mockApi({});
     renderAt('/new');
+    await formReady();
     fillAndSubmit('   ', '');
 
     expect(screen.getByText(/Donnez un nom/)).toBeTruthy();
@@ -43,6 +49,7 @@ describe('création d’un nikount', () => {
   it('crée le nikount, affiche les deux liens et mémorise l’accès admin', async () => {
     const fetchMock = mockApi({ '/api/v1/nikounts': () => ({ status: 201, body: created }) });
     const { router } = renderAt('/new');
+    await formReady();
     fillAndSubmit('Weekend Chamonix', 'Nicolas');
 
     expect(await screen.findByText(/est prêt/)).toBeTruthy();
@@ -75,6 +82,7 @@ describe('création d’un nikount', () => {
   it('explique la limite de créations', async () => {
     mockApi({ '/api/v1/nikounts': () => ({ status: 429, body: errorBody('RATE_LIMITED') }) });
     renderAt('/new');
+    await formReady();
     fillAndSubmit('Weekend', 'Nicolas');
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/Trop de créations/);
@@ -83,6 +91,7 @@ describe('création d’un nikount', () => {
   it('ajoute des participants, refuse les doublons et les envoie avec la création', async () => {
     const fetchMock = mockApi({ '/api/v1/nikounts': () => ({ status: 201, body: created }) });
     renderAt('/new');
+    await formReady();
 
     fireEvent.change(screen.getByLabelText('Nom de l’événement'), { target: { value: 'Weekend' } });
     fireEvent.change(screen.getByLabelText('Votre prénom'), { target: { value: 'Nicolas' } });

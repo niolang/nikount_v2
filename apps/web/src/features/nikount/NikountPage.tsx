@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router';
 import { tokenRole, type AccessRole, type MeResponse } from '@nikount/contracts';
 import { ApiError } from '../../api/client';
@@ -6,19 +6,38 @@ import { useMe } from '../../api/nikount';
 import { PageShell } from '../../components/ui';
 import { nikountPath } from '../../lib/links';
 import { forgetNikount, rememberNikount } from '../../lib/recent-nikounts';
-import { AuditPage } from '../audit/AuditPage';
-import { OperationsPage } from '../operations/OperationsPage';
-import { ReviewPage } from '../review/ReviewPage';
-import { EditTransactionPage } from '../transactions/EditTransaction';
-import { ExpenseFormPage } from '../transactions/ExpenseFormPage';
 import { HistoryPage } from '../transactions/HistoryPage';
-import { ReimbursementFormPage } from '../transactions/ReimbursementFormPage';
 import { TransactionDetailPage } from '../transactions/TransactionDetailPage';
-import { ManageParticipantsPage } from './ManageParticipantsPage';
 import { MenuPage } from './MenuPage';
 import { NikountHome } from './NikountHome';
 import { NikountLayout } from './NikountLayout';
-import { SettingsPage } from './SettingsPage';
+
+// Chargés à la demande : formulaires de saisie et écrans réservés aux admins. Un participant
+// qui consulte les comptes ne télécharge que l'accueil, l'historique et le détail.
+const ExpenseFormPage = lazy(() =>
+  import('../transactions/ExpenseFormPage').then((m) => ({ default: m.ExpenseFormPage })),
+);
+const ReimbursementFormPage = lazy(() =>
+  import('../transactions/ReimbursementFormPage').then((m) => ({
+    default: m.ReimbursementFormPage,
+  })),
+);
+const EditTransactionPage = lazy(() =>
+  import('../transactions/EditTransaction').then((m) => ({ default: m.EditTransactionPage })),
+);
+const ReviewPage = lazy(() =>
+  import('../review/ReviewPage').then((m) => ({ default: m.ReviewPage })),
+);
+const OperationsPage = lazy(() =>
+  import('../operations/OperationsPage').then((m) => ({ default: m.OperationsPage })),
+);
+const AuditPage = lazy(() => import('../audit/AuditPage').then((m) => ({ default: m.AuditPage })));
+const ManageParticipantsPage = lazy(() =>
+  import('./ManageParticipantsPage').then((m) => ({ default: m.ManageParticipantsPage })),
+);
+const SettingsPage = lazy(() =>
+  import('./SettingsPage').then((m) => ({ default: m.SettingsPage })),
+);
 
 /**
  * Point d'entrée d'un nikount, pour `/n/:token/*` (participant) et `/a/:token/*` (admin).
@@ -45,9 +64,7 @@ function NikountLoader({ token }: { token: string }) {
   if (me.isPending) {
     return (
       <PageShell>
-        <p className="m-auto text-slate-500" role="status">
-          Chargement…
-        </p>
+        <Loading />
       </PageShell>
     );
   }
@@ -71,7 +88,7 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
   const props = { token, me, basePath };
   const layout = (page: ReactNode, mobileNav = true) => (
     <NikountLayout token={token} me={me} basePath={basePath} mobileNav={mobileNav}>
-      {page}
+      <Suspense fallback={<Loading />}>{page}</Suspense>
     </NikountLayout>
   );
   // Écrans de gestion : réservés aux admins (le serveur le vérifie aussi), sans navigation basse.
@@ -106,6 +123,14 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
       <Route path="settings" element={adminOnly(<SettingsPage {...props} />)} />
       <Route path="*" element={<Navigate to={basePath} replace />} />
     </Routes>
+  );
+}
+
+function Loading() {
+  return (
+    <p className="m-auto py-8 text-center text-slate-500" role="status">
+      Chargement…
+    </p>
   );
 }
 

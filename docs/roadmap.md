@@ -15,7 +15,7 @@
 | **8** Remboursements ✅            | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
 | **9** Cycle de vie ✅              | OPEN/SETTLEMENT/CLOSED, réouverture motivée, badge d'état, rotation du lien participant, gestion des admins                                                                                                                                                      | Matrice état × action testée ; clôture refusée si PENDING                                                                |
 | **10** Admin desktop ✅            | Layout `lg`, table dense (filtres, recherche, tri, sélection multiple), édition inline + panneau, audit, paramètres                                                                                                                                              | Parcours trésorier complet sur desktop                                                                                   |
-| **11** Durcissement                | Tests API d'isolation sur toutes les routes, en-têtes/CSP, rate limits, Playwright mobile (parcours clés), accessibilité, perf, `docker-compose.prod.yml`, sauvegardes, doc d'exploitation                                                                       | Revue sécurité OK ; Lighthouse mobile ≥ 90                                                                               |
+| **11** Durcissement ✅             | Tests API d'isolation sur toutes les routes, en-têtes/CSP, rate limits, Playwright mobile (parcours clés), accessibilité, perf, `docker-compose.prod.yml`, sauvegardes, doc d'exploitation                                                                       | Revue sécurité OK ; Lighthouse mobile ≥ 90                                                                               |
 
 > 🟡 Phase 1 : tout est vérifié localement (lint, types, 50 tests, build, migrations, API + front lancés) sauf `docker compose up` lui-même
 > (Docker absent de la machine de dev). Depuis le 2026-11-08, la CI GitHub est verte : lint, types, tests, build, construction des deux images Docker, validation du Caddyfile et des fichiers Compose.
@@ -88,14 +88,32 @@
 > (< 1 000 opérations par nikount) : pas de paramètres de requête sur `GET /transactions`. 547 tests ; vérifié dans
 > le navigateur (desktop et mobile). Bundle à 825 Ko (découpage prévu en Phase 11).
 
+> ✅ Phase 11 : test d’isolation générique (la liste des routes est relue depuis Fastify : une route sans cas fait
+> échouer le test ; sans token → 401, lien participant sur route admin → 403, liens d’un autre nikount → refus, aucune
+> donnée de A dans les réponses, état de A inchangé). Limites par lien d’accès (60 écritures et 300 lectures par
+> minute ; lien du groupe compté par lien et par IP). Clôture concurrente testée sur un vrai PostgreSQL 17
+> (conteneur en CI) : 25 tours clôture + 4 déclarations simultanées, et vérification qu’il échoue sans le verrou.
+> En-têtes Caddy complétés (COOP, CORP, X-Frame-Options, cartes de sources non servies) ; `vite preview` sert la même
+> CSP ; Zod en mode `jitless` (plus aucune violation de CSP). Bundle : le build local embarquait la version de
+> développement de React (NODE_ENV du `.env` lu par Vite) ; corrigé, et écrans chargés à la demande : 825 Ko →
+> ~500 Ko au premier chargement (≈ 150 Ko compressés), formulaires et écrans admin à part. Playwright (Pixel 7) :
+> parcours complet création → dépense participante → validation → remboursements → clôture, lien invalide, écrans
+> admin desktop ; audit axe-core (WCAG 2.1 AA) sur chaque écran visité, erreurs console et violations de CSP
+> bloquantes. Un défaut corrigé (WCAG 2.5.3 sur les cellules modifiables). Lighthouse mobile : performance 98
+> (accueil) et 95 (lien du groupe), accessibilité 100. Production : rôle PostgreSQL applicatif sans DDL (droits
+> réappliqués à chaque migration, testés), service `migrate`, sauvegarde quotidienne vérifiée avec rotation,
+> conteneurs durcis (lecture seule, `no-new-privileges`, healthcheck, rotation des journaux), CI qui démarre la
+> pile de production en HTTPS et restaure une sauvegarde ; `pnpm audit` et Dependabot ; docs/operations.md.
+> Non fait : déploiement sur un serveur public réel (aucun serveur disponible).
+
 ## Stratégie de tests
 
 | Niveau                   | Outil                                                           | Cible                                                                                                                                                                                         |
 | ------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Moteur (`packages/core`) | Vitest + fast-check                                             | Couverture ~100 % ; exemples métier + propriétés : somme des parts, somme des soldes nulle, déterminisme, ordre des entrées sans effet sur le total, montants jamais négatifs (hors AMOUNT=0) |
 | Règles                   | Vitest                                                          | Matrices état × rôle × statut × action, exhaustives                                                                                                                                           |
-| API                      | Vitest + `fastify.inject` + PostgreSQL réel (PGlite en mémoire) | Chaque route : succès, validation, 401/403/404, isolation inter-nikount, conflits de version                                                                                                  |
-| E2E                      | Playwright (viewport mobile)                                    | Créer → ajouter dépense → valider → soldes → rembourser → clôturer                                                                                                                            |
+| API                      | Vitest + `fastify.inject` + PostgreSQL réel (PGlite en mémoire) | Chaque route : succès, validation, 401/403/404, isolation inter-nikount, conflits de version ; droits du rôle applicatif ; clôture concurrente sur PostgreSQL 17 (CI)                         |
+| E2E                      | Playwright (viewport mobile) + axe-core                         | Créer → ajouter dépense → valider → soldes → rembourser → clôturer ; accessibilité WCAG 2.1 AA et absence de violation de CSP sur chaque écran                                                |
 
 ## Hors MVP (backlog identifié)
 

@@ -12,6 +12,7 @@ import type { Config } from './config.js';
 import { isDatabaseUp, type Database } from './db/client.js';
 import { DomainError, registerErrorHandling } from './lib/errors.js';
 import { FailureLimiter } from './lib/failure-limiter.js';
+import { RequestLimiter } from './lib/request-limiter.js';
 import { loggerOptions } from './lib/logger.js';
 import { SecretBox } from './lib/secret-box.js';
 import type { AppInstance } from './lib/types.js';
@@ -81,6 +82,17 @@ export async function buildApp(deps: AppDependencies): Promise<AppInstance> {
     blockMs: config.AUTH_FAILURE_BLOCK_MINUTES * MINUTE,
     ...(deps.now ? { now: deps.now } : {}),
   });
+  const clock = deps.now ? { now: deps.now } : {};
+  const writeLimiter = new RequestLimiter({
+    max: config.RATE_LIMIT_WRITES_PER_MINUTE,
+    windowMs: MINUTE,
+    ...clock,
+  });
+  const readLimiter = new RequestLimiter({
+    max: config.RATE_LIMIT_READS_PER_MINUTE,
+    windowMs: MINUTE,
+    ...clock,
+  });
   const routeOptions = { db, secretBox, createPerHour: config.RATE_LIMIT_CREATE_PER_HOUR };
 
   await app.register(
@@ -93,6 +105,19 @@ export async function buildApp(deps: AppDependencies): Promise<AppInstance> {
       // Tout ce qui est enregistré ici exige un token valide.
       await api.register(async (protectedApi) => {
         protectedApi.addHook('onRequest', createAuthenticator({ db, failureLimiter }));
+        // Limites par lien d'accès. Le lien participant étant partagé par tout le groupe, son
+        // compteur est aussi séparé par IP (un groupe entier ne se bloque pas lui-même).
+        protectedApi.addHook('onRequest', async (request) => {
+          const access = request.access;
+          if (!access) return;
+          const key = access.adminId
+            ? `a:${access.adminId}`
+            : `p:${access.nikountId}:${request.ip}`;
+          const limiter = request.method === 'GET' ? readLimiter : writeLimiter;
+          if (!limiter.hit(key)) {
+            throw new DomainError(429, 'RATE_LIMITED', 'Trop de requêtes. Réessayez plus tard.');
+          }
+        });
         await protectedApi.register(protectedNikountRoutes, routeOptions);
         await protectedApi.register(participantRoutes, { db });
         await protectedApi.register(transactionRoutes, { db });

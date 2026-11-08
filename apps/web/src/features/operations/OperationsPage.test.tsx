@@ -84,7 +84,8 @@ async function openTable() {
 const bodyRows = () => screen.getAllByRole('row').slice(1);
 const descriptions = () =>
   bodyRows().map(
-    (row) => within(row).getByRole('button', { name: /^Modifier : Description/ }).textContent,
+    (row) =>
+      within(row).getByRole('button', { name: /\(modifier : Description/ }).firstChild?.textContent,
   );
 
 describe('table des opérations', () => {
@@ -177,7 +178,9 @@ describe('table des opérations', () => {
       [url]: () => ({ status: 200, body: { ...restaurant, description: 'Pizzeria', version: 3 } }),
     });
     await openTable();
-    fireEvent.click(screen.getByRole('button', { name: 'Modifier : Description de Restaurant' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /\(modifier : Description de Restaurant\)$/ }),
+    );
     const input = screen.getByRole('textbox', { name: 'Description de Restaurant' });
     fireEvent.change(input, { target: { value: 'Pizzeria' } });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -200,13 +203,15 @@ describe('table des opérations', () => {
     const url = `/api/v1/transactions/${restaurant.id}`;
     const fetchMock = mockAdmin();
     await openTable();
-    fireEvent.click(screen.getByRole('button', { name: 'Modifier : Description de Restaurant' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /\(modifier : Description de Restaurant\)$/ }),
+    );
     const input = screen.getByRole('textbox', { name: 'Description de Restaurant' });
     fireEvent.change(input, { target: { value: 'Autre' } });
     fireEvent.keyDown(input, { key: 'Escape' });
     fireEvent.blur(input);
     expect(
-      screen.getByRole('button', { name: 'Modifier : Description de Restaurant' }),
+      screen.getByRole('button', { name: /\(modifier : Description de Restaurant\)$/ }),
     ).toBeTruthy();
     expect(callsTo(fetchMock, url, 'PUT')).toHaveLength(0);
   });
@@ -227,7 +232,7 @@ describe('table des opérations', () => {
   it('n’offre aucune édition sur un nikount clôturé', async () => {
     mockAdmin({}, { ...adminMe, nikount: { ...nikountView, state: 'CLOSED' } });
     await openTable();
-    expect(screen.queryByRole('button', { name: /^Modifier : / })).toBeNull();
+    expect(screen.queryByRole('button', { name: /\(modifier : / })).toBeNull();
     expect(screen.queryByRole('combobox', { name: /Catégorie de/ })).toBeNull();
   });
 

@@ -16,6 +16,23 @@ jobs:
   check:
     name: Lint, types, tests, build
     runs-on: ubuntu-latest
+    # PostgreSQL réel pour le test de clôture concurrente (PGlite n'a qu'une connexion).
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nikount_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d nikount_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      TEST_POSTGRES_URL: postgres://test:test@localhost:5432/nikount_test
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -24,28 +41,87 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Vulnérabilités connues (sévérité haute ou critique) dans les dépendances de production.
+      - run: pnpm audit --prod --audit-level high
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
 
-  docker:
-    name: Images Docker
+  e2e:
+    name: Parcours mobiles (Playwright)
     runs-on: ubuntu-latest
     needs: check
     steps:
       - uses: actions/checkout@v5
-      - run: docker build -f docker/api.Dockerfile -t nikount-api .
-      - run: docker build -f docker/web.Dockerfile -t nikount-web .
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nikount/e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            apps/e2e/playwright-report
+            apps/e2e/test-results
+          retention-days: 7
+
+  docker:
+    name: Pile de production (Docker)
+    runs-on: ubuntu-latest
+    needs: check
+    env:
+      COMPOSE: docker compose -f docker-compose.prod.yml
+    steps:
+      - uses: actions/checkout@v5
+      - name: Secrets jetables
+        run: |
+          {
+            echo "SITE_ADDRESS=localhost"
+            echo "PUBLIC_BASE_URL=https://localhost"
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "POSTGRES_APP_PASSWORD=$(openssl rand -hex 24)"
+            echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+          } > .env
+      - name: Valider les fichiers Compose
+        run: |
+          $COMPOSE config --quiet
+          docker compose config --quiet
+      - run: $COMPOSE --profile tools build
       - name: Valider le Caddyfile
         run: docker run --rm -e SITE_ADDRESS=localhost nikount-web caddy validate --config /etc/caddy/Caddyfile
-      - name: Valider les fichiers Compose
-        env:
-          POSTGRES_PASSWORD: x
-          SITE_ADDRESS: localhost
-          PUBLIC_BASE_URL: https://localhost
-          TOKEN_ENCRYPTION_KEY: x
+      - name: Démarrer comme en production (base, migrations, API, Caddy)
         run: |
-          docker compose -f docker-compose.prod.yml config --quiet
-          docker compose config --quiet
+          $COMPOSE up -d --wait db
+          $COMPOSE run --rm migrate
+          $COMPOSE up -d --wait api web backup
+      - name: Vérifier la pile démarrée
+        run: |
+          set -x
+          curl -fsSk https://localhost/api/v1/health
+          curl -fsSk -X POST https://localhost/api/v1/nikounts \
+            -H 'content-type: application/json' -d '{"name":"CI","adminLabel":"Robot"}' | grep -q adminToken
+          curl -fsSkI https://localhost/n/p_inexistant | grep -qi "content-security-policy: default-src 'self'"
+          curl -fsSkI https://localhost/ | grep -qi 'strict-transport-security'
+          # Le rôle de l'API n'a aucun droit DDL.
+          if $COMPOSE exec -T db psql -U nikount_app -d nikount -c 'create table intrus (id int)'; then
+            echo "Le rôle applicatif ne devrait pas pouvoir créer de table" && exit 1
+          fi
+      - name: Sauvegarde puis restauration dans une base vierge
+        run: |
+          $COMPOSE exec -T backup sh /usr/local/bin/backup.sh once
+          dump=$(ls backups/nikount-*.dump | head -1)
+          $COMPOSE exec -T db createdb -U nikount restore_check
+          $COMPOSE exec -T db pg_restore -U nikount -d restore_check --no-owner < "$dump"
+          test "$($COMPOSE exec -T db psql -U nikount -d restore_check -tAc "select count(*) from nikount where name = 'CI'")" = "1"
+      - name: Journaux en cas d'échec
+        if: failure()
+        run: $COMPOSE logs --no-color
