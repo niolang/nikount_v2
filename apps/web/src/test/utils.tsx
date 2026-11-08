@@ -70,3 +70,43 @@ export const adminMe = {
 };
 
 export const participantMe = { role: 'PARTICIPANT', admin: null, nikount: nikountView };
+
+/** Opération complète (format de l'API) avec des valeurs par défaut surchargeables. */
+export function makeTransaction(overrides: Record<string, unknown> = {}) {
+  return {
+    id: '0193f0aa-0000-7000-8000-000000000900',
+    type: 'EXPENSE',
+    status: 'VALIDATED',
+    amount: 12000,
+    description: 'Restaurant',
+    category: 'FOOD',
+    occurredOn: '2026-09-28',
+    payerId: people.alice.id,
+    distributionMode: 'EQUAL',
+    shares: [],
+    createdAt: '2026-09-28T18:42:00.000Z',
+    createdBy: {
+      kind: 'ADMIN',
+      admin: { id: ADMIN_ID, label: 'Nicolas' },
+      declaredParticipantId: null,
+    },
+    validatedAt: '2026-09-28T18:42:00.000Z',
+    validatedBy: { id: ADMIN_ID, label: 'Nicolas' },
+    rejectedAt: null,
+    rejectedBy: null,
+    rejectionReason: null,
+    cancelledAt: null,
+    cancelledBy: null,
+    cancellationReason: null,
+    version: 1,
+    ...overrides,
+  };
+}
+
+/** Soldes tous à zéro (pour les écrans qui n'en testent pas le contenu). */
+export const zeroBalances = {
+  balances: Object.values(people).map((p) => ({ participantId: p.id, balance: 0 })),
+  nextPayerId: null,
+  settlementSuggestions: [],
+  pending: { count: 0, amount: 0 },
+};

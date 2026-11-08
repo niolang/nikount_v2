@@ -1,22 +1,30 @@
 import { Link, useLocation } from 'react-router';
 import type { MeResponse, ParticipantView, TransactionView } from '@nikount/contracts';
 import { isActionAllowed } from '@nikount/core';
-import { useParticipantLink } from '../../api/nikount';
+import { useBalances } from '../../api/balances';
 import { useParticipants } from '../../api/participants';
 import { useTransactions } from '../../api/transactions';
-import { useBalances } from '../../api/balances';
+import { Card, PageShell, StateBadge } from '../../components/ui';
 import { BalancesCard } from '../balances/BalancesCard';
-import { Card, PageShell, ShareableLink, StateBadge } from '../../components/ui';
-import { transactionEmoji } from '../../lib/categories';
-import { formatShortDate } from '../../lib/dates';
-import { formatMoney } from '../../lib/format';
-import { nikountUrl } from '../../lib/links';
+import { TransactionRow } from '../transactions/TransactionRow';
 import { useCurrentParticipant } from './useCurrentParticipant';
 
-/** Nombre d'opérations affichées sur l'accueil (l'historique complet arrive en Phase 6). */
-const RECENT_LIMIT = 10;
+/** Nombre d'opérations affichées sur l'accueil ; le reste est dans l'historique. */
+const RECENT_LIMIT = 5;
 
-export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
+/**
+ * Écran principal (docs/product.md §15) : solde, à recevoir / à payer, ajout d'une dépense,
+ * dernières opérations.
+ */
+export function NikountHome({
+  token,
+  me,
+  basePath,
+}: {
+  token: string;
+  me: MeResponse;
+  basePath: string;
+}) {
   const participants = useParticipants(token);
   const transactions = useTransactions(token);
   const balances = useBalances(token);
@@ -30,13 +38,7 @@ export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
 
   return (
     <PageShell>
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-bold tracking-wider text-brand-700 uppercase">nikount</p>
-          <h1 className="mt-1 truncate text-2xl font-bold">{me.nikount.name}</h1>
-        </div>
-        <StateBadge state={me.nikount.state} />
-      </header>
+      <NikountHeader me={me} />
       <p className="mt-1 text-sm text-slate-500">
         {isAdmin && me.admin ? `Administrateur · ${me.admin.label}` : null}
         {!isAdmin && identity.current ? (
@@ -85,7 +87,7 @@ export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
 
           {canAddExpense ? (
             <Link
-              to="expenses/new"
+              to={`${basePath}/expenses/new`}
               className="mt-6 flex min-h-14 items-center justify-center rounded-2xl bg-brand-700 px-6 text-lg font-semibold text-white shadow-sm hover:bg-brand-800"
             >
               + Ajouter une dépense
@@ -97,24 +99,23 @@ export function NikountHome({ token, me }: { token: string; me: MeResponse }) {
             isError={transactions.isError}
             participants={participants.data ?? []}
             currency={me.nikount.currency}
+            basePath={basePath}
           />
-
-          {participants.data ? (
-            <ParticipantsCard
-              participants={participants.data}
-              currentId={identity.current?.id ?? null}
-              manageLink={isAdmin ? 'participants' : null}
-            />
-          ) : null}
-
-          {isAdmin ? <InviteCard token={token} nikountName={me.nikount.name} /> : null}
         </>
       )}
-
-      <Link to="/" className="mt-auto pt-8 text-center text-sm font-semibold text-brand-700">
-        Mes nikounts
-      </Link>
     </PageShell>
+  );
+}
+
+export function NikountHeader({ me }: { me: MeResponse }) {
+  return (
+    <header className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-xs font-bold tracking-wider text-brand-700 uppercase">nikount</p>
+        <h1 className="mt-1 truncate text-2xl font-bold">{me.nikount.name}</h1>
+      </div>
+      <StateBadge state={me.nikount.state} />
+    </header>
   );
 }
 
@@ -163,88 +164,30 @@ function IdentityPicker({
   );
 }
 
-function ParticipantsCard({
-  participants,
-  currentId,
-  manageLink,
-}: {
-  participants: ParticipantView[];
-  currentId: string | null;
-  manageLink: string | null;
-}) {
-  const active = participants.filter((p) => p.isActive);
-  return (
-    <Card className="mt-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-bold">Participants ({active.length})</h2>
-        {manageLink ? (
-          <Link to={manageLink} className="text-sm font-semibold text-brand-700">
-            Gérer
-          </Link>
-        ) : null}
-      </div>
-      {active.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-500">Personne pour l’instant.</p>
-      ) : (
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {active.map((participant) => (
-            <li
-              key={participant.id}
-              className={`rounded-full px-3 py-1 text-sm ${
-                participant.id === currentId
-                  ? 'bg-brand-700 font-semibold text-white'
-                  : 'bg-slate-100 text-slate-700'
-              }`}
-            >
-              {participant.name}
-              {participant.id === currentId ? ' (vous)' : ''}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
-function InviteCard({ token, nikountName }: { token: string; nikountName: string }) {
-  const participantLink = useParticipantLink(token, true);
-  return (
-    <Card className="mt-4">
-      <h2 className="font-bold">👥 Inviter le groupe</h2>
-      <p className="mt-1 mb-3 text-sm text-slate-600">
-        Envoyez ce lien aux participants. Ne partagez jamais votre lien administrateur.
-      </p>
-      {participantLink.data ? (
-        <ShareableLink
-          label="Lien du groupe"
-          url={nikountUrl('PARTICIPANT', participantLink.data.participantToken)}
-          shareTitle={nikountName}
-        />
-      ) : participantLink.isError ? (
-        <p className="text-sm text-red-600">Lien indisponible pour le moment.</p>
-      ) : (
-        <p className="text-sm text-slate-500">Chargement du lien…</p>
-      )}
-    </Card>
-  );
-}
-
-/** Dernières opérations (version simple ; l'historique complet arrive en Phase 6). */
 function RecentTransactions({
   transactions,
   isError,
   participants,
   currency,
+  basePath,
 }: {
   transactions: TransactionView[] | undefined;
   isError: boolean;
   participants: ParticipantView[];
   currency: string;
+  basePath: string;
 }) {
   const names = new Map(participants.map((p) => [p.id, p.name]));
   return (
     <Card className="mt-4">
-      <h2 className="font-bold">Dernières opérations</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold">Dernières opérations</h2>
+        {transactions && transactions.length > 0 ? (
+          <Link to={`${basePath}/history`} className="text-sm font-semibold text-brand-700">
+            Tout l’historique
+          </Link>
+        ) : null}
+      </div>
       {isError ? (
         <p className="mt-2 text-sm text-red-600">Impossible de charger les opérations.</p>
       ) : !transactions ? (
@@ -254,23 +197,14 @@ function RecentTransactions({
       ) : (
         <ul className="mt-2 divide-y divide-slate-100">
           {transactions.slice(0, RECENT_LIMIT).map((t) => (
-            <li key={t.id} className="flex items-center gap-3 py-2.5">
-              <span className="text-2xl" aria-hidden="true">
-                {transactionEmoji(t.type, t.category)}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">{t.description}</p>
-                <p className="text-sm text-slate-500">
-                  {names.get(t.payerId) ?? '?'} · {formatShortDate(t.occurredOn)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="tabular font-semibold">{formatMoney(t.amount, currency)}</p>
-                {t.status === 'PENDING' ? (
-                  <p className="text-xs font-semibold text-amber-700">⏳ En attente</p>
-                ) : null}
-              </div>
-            </li>
+            <TransactionRow
+              key={t.id}
+              transaction={t}
+              names={names}
+              currency={currency}
+              basePath={basePath}
+              showDate
+            />
           ))}
         </ul>
       )}

@@ -3,6 +3,7 @@ import {
   CreateTransactionRequest,
   TransactionIdParams,
   TransactionListResponse,
+  TransactionRevisionListResponse,
   TransactionView,
 } from '@nikount/contracts';
 import { getAccess } from '../../auth/access.js';
@@ -30,6 +31,14 @@ export const transactionRoutes: FastifyPluginAsyncZod<TransactionRoutesOptions> 
     '/transactions/:id',
     { schema: { params: TransactionIdParams, response: { 200: TransactionView } } },
     async (request) => service.getTransaction(db, getAccess(request).nikountId, request.params.id),
+  );
+
+  app.get(
+    '/transactions/:id/revisions',
+    { schema: { params: TransactionIdParams, response: { 200: TransactionRevisionListResponse } } },
+    async (request) => ({
+      revisions: await service.listRevisions(db, getAccess(request).nikountId, request.params.id),
+    }),
   );
 
   app.post(

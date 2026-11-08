@@ -116,3 +116,20 @@ export async function insertRevision(
 ): Promise<void> {
   await db.insert(transactionRevision).values(values);
 }
+
+export async function listRevisions(
+  db: Database,
+  nikountId: string,
+  transactionId: string,
+): Promise<(typeof transactionRevision.$inferSelect)[]> {
+  return db
+    .select()
+    .from(transactionRevision)
+    .where(
+      and(
+        eq(transactionRevision.nikountId, nikountId),
+        eq(transactionRevision.transactionId, transactionId),
+      ),
+    )
+    .orderBy(asc(transactionRevision.revision));
+}

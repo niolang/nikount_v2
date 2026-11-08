@@ -105,9 +105,33 @@ export const TransactionView = z.object({
   }),
   validatedAt: z.iso.datetime({ offset: true }).nullable(),
   validatedBy: AdminRef,
+  rejectedAt: z.iso.datetime({ offset: true }).nullable(),
+  rejectedBy: AdminRef,
+  rejectionReason: z.string().nullable(),
+  cancelledAt: z.iso.datetime({ offset: true }).nullable(),
+  cancelledBy: AdminRef,
+  cancellationReason: z.string().nullable(),
   version: z.number().int(),
 });
 export type TransactionView = z.infer<typeof TransactionView>;
+
+/** Une version de l'opération (création puis chaque modification) — docs/product.md §9. */
+export const TransactionRevisionView = z.object({
+  revision: z.number().int(),
+  createdAt: z.iso.datetime({ offset: true }),
+  changedBy: z.object({
+    kind: ActorKind,
+    admin: AdminRef,
+    declaredParticipantId: z.uuid().nullable(),
+  }),
+  reason: z.string().nullable(),
+});
+export type TransactionRevisionView = z.infer<typeof TransactionRevisionView>;
+
+export const TransactionRevisionListResponse = z.object({
+  revisions: z.array(TransactionRevisionView),
+});
+export type TransactionRevisionListResponse = z.infer<typeof TransactionRevisionListResponse>;
 
 export const TransactionListResponse = z.object({
   transactions: z.array(TransactionView),

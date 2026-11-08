@@ -1,5 +1,9 @@
 import type { z } from 'zod';
-import type { CreateTransactionRequest, TransactionView } from '@nikount/contracts';
+import type {
+  CreateTransactionRequest,
+  TransactionRevisionView,
+  TransactionView,
+} from '@nikount/contracts';
 import {
   computeSplit,
   isActionAllowed,
@@ -57,6 +61,12 @@ function toView(
     },
     validatedAt: row.validatedAt?.toISOString() ?? null,
     validatedBy: adminRef(row.validatedByAdminId),
+    rejectedAt: row.rejectedAt?.toISOString() ?? null,
+    rejectedBy: adminRef(row.rejectedByAdminId),
+    rejectionReason: row.rejectionReason,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    cancelledBy: adminRef(row.cancelledByAdminId),
+    cancellationReason: row.cancellationReason,
     version: row.version,
   };
 }
@@ -99,6 +109,33 @@ export async function getTransaction(
   const [view] = await viewsOf(db, nikountId, [row]);
   if (!view) throw new Error('Vue introuvable');
   return view;
+}
+
+/** Versions successives d'une opération (la plus ancienne d'abord). */
+export async function listRevisions(
+  db: Database,
+  nikountId: string,
+  transactionId: string,
+): Promise<TransactionRevisionView[]> {
+  if (!(await repo.findTransaction(db, nikountId, transactionId))) {
+    throw new DomainError(404, 'NOT_FOUND', 'Ressource introuvable.');
+  }
+  const [rows, labels] = await Promise.all([
+    repo.listRevisions(db, nikountId, transactionId),
+    repo.adminLabels(db, nikountId),
+  ]);
+  return rows.map((row) => ({
+    revision: row.revision,
+    createdAt: row.createdAt.toISOString(),
+    changedBy: {
+      kind: row.changedByKind,
+      admin: row.changedByAdminId
+        ? { id: row.changedByAdminId, label: labels.get(row.changedByAdminId) ?? '' }
+        : null,
+      declaredParticipantId: row.declaredByParticipantId,
+    },
+    reason: row.reason,
+  }));
 }
 
 // --- Création --------------------------------------------------------------------------------

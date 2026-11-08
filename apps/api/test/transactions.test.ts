@@ -5,6 +5,7 @@ import {
   ErrorResponse,
   ParticipantListResponse,
   TransactionListResponse,
+  TransactionRevisionListResponse,
   TransactionView,
 } from '@nikount/contracts';
 import {
@@ -585,5 +586,74 @@ describe('lecture', () => {
   it('exige un token', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/transactions' });
     expect(response.statusCode).toBe(401);
+  });
+});
+
+describe('historique d’une opération', () => {
+  it('expose les traces d’annulation (qui, quand, motif)', async () => {
+    const s = await setup();
+    const view = TransactionView.parse((await post(s.adminToken, expense(s))).json());
+    expect(view).toMatchObject({ cancelledAt: null, cancelledBy: null, rejectedAt: null });
+
+    // L'annulation par l'interface arrive en Phase 7 : on la simule en base.
+    await testDb.db
+      .update(financialTransaction)
+      .set({
+        status: 'CANCELLED',
+        cancelledAt: new Date('2026-09-28T20:14:00Z'),
+        cancelledByAdminId: s.admin.id,
+        cancellationReason: 'Doublon',
+      })
+      .where(eq(financialTransaction.id, view.id));
+
+    const detail = TransactionView.parse(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/v1/transactions/${view.id}`,
+          headers: bearer(s.participantToken),
+        })
+      ).json(),
+    );
+    expect(detail).toMatchObject({
+      status: 'CANCELLED',
+      cancelledAt: '2026-09-28T20:14:00.000Z',
+      cancelledBy: { id: s.admin.id, label: 'Nicolas' },
+      cancellationReason: 'Doublon',
+    });
+  });
+
+  it('liste les versions : la création est la version 1', async () => {
+    const s = await setup();
+    const view = TransactionView.parse(
+      (await post(s.participantToken, expense(s, { declaredByParticipantId: s.bob }))).json(),
+    );
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/transactions/${view.id}/revisions`,
+      headers: bearer(s.participantToken),
+    });
+    expect(response.statusCode).toBe(200);
+    const { revisions } = TransactionRevisionListResponse.parse(response.json());
+    expect(revisions).toEqual([
+      {
+        revision: 1,
+        createdAt: expect.any(String) as unknown,
+        changedBy: { kind: 'PARTICIPANT', admin: null, declaredParticipantId: s.bob },
+        reason: null,
+      },
+    ]);
+  });
+
+  it('versions d’une opération d’un autre nikount → 404', async () => {
+    const a = await setup();
+    const b = await setup();
+    const view = TransactionView.parse((await post(a.adminToken, expense(a))).json());
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/transactions/${view.id}/revisions`,
+      headers: bearer(b.adminToken),
+    });
+    expect(response.statusCode).toBe(404);
   });
 });

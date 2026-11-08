@@ -39,7 +39,6 @@ describe('accès participant /n/:token', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bob' }));
 
     expect(screen.getByText('Bob', { selector: 'strong' })).toBeTruthy();
-    expect(screen.getByText('Bob (vous)')).toBeTruthy();
     expect(getDeclaredIdentity(PARTICIPANT_TOKEN)).toBe(people.bob.id);
     expect(screen.queryByText('Gérer')).toBeNull();
     expect(screen.queryByText(/Inviter le groupe/)).toBeNull();
@@ -58,7 +57,7 @@ describe('accès participant /n/:token', () => {
     });
     renderAt(`/n/${PARTICIPANT_TOKEN}`);
 
-    expect(await screen.findByText('Alice (vous)')).toBeTruthy();
+    expect(await screen.findByText('Alice', { selector: 'strong' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'changer' }));
     expect(screen.getByRole('heading', { name: 'Qui êtes-vous ?' })).toBeTruthy();
     expect(getDeclaredIdentity(PARTICIPANT_TOKEN)).toBeNull();
@@ -123,8 +122,12 @@ describe('accès admin /a/:token', () => {
     renderAt(`/a/${ADMIN_TOKEN}`);
 
     expect(await screen.findByText('Administrateur · Nicolas')).toBeTruthy();
-    expect(await screen.findByText('Nicolas (vous)')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Qui êtes-vous ?' })).toBeNull();
+
+    // Participants et lien d'invitation sont dans le menu.
+    fireEvent.click(screen.getByRole('link', { name: /Menu/ }));
+    expect(await screen.findByText(/participant : Nicolas/)).toBeTruthy();
+    expect(await screen.findByText('Nicolas (vous)')).toBeTruthy();
 
     const card = screen.getByRole('heading', { name: /Participants \(3\)/ }).closest('section');
     expect(within(card as HTMLElement).queryByText('Ancien')).toBeNull();
@@ -132,5 +135,34 @@ describe('accès admin /a/:token', () => {
 
     const link = await screen.findByLabelText<HTMLInputElement>('Lien du groupe');
     expect(link.value).toBe(`${window.location.origin}/n/${PARTICIPANT_TOKEN}`);
+  });
+});
+
+describe('navigation basse', () => {
+  it('mène à l’accueil, aux dépenses, aux remboursements et au menu, en marquant l’onglet actif', async () => {
+    mockApi({
+      '/api/v1/me': () => ({ status: 200, body: participantMe }),
+      '/api/v1/participants': () => ({ status: 200, body: participantList }),
+    });
+    setDeclaredIdentity(PARTICIPANT_TOKEN, people.bob.id);
+    const { router } = renderAt(`/n/${PARTICIPANT_TOKEN}`);
+    const nav = within(await screen.findByRole('navigation', { name: 'Navigation du nikount' }));
+
+    expect(nav.getByRole('link', { name: /Accueil/ }).getAttribute('aria-current')).toBe('page');
+    fireEvent.click(nav.getByRole('link', { name: /Dépenses/ }));
+    expect(router.state.location.search).toBe('?filter=EXPENSE');
+    expect(
+      within(screen.getByRole('navigation', { name: 'Navigation du nikount' }))
+        .getByRole('link', { name: /Dépenses/ })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+
+    const bottomNav = () =>
+      within(screen.getByRole('navigation', { name: 'Navigation du nikount' }));
+    fireEvent.click(bottomNav().getByRole('link', { name: /Remboursements/ }));
+    expect(router.state.location.search).toBe('?filter=REIMBURSEMENT');
+    fireEvent.click(bottomNav().getByRole('link', { name: /Menu/ }));
+    expect(router.state.location.pathname).toBe(`/n/${PARTICIPANT_TOKEN}/menu`);
+    expect(await screen.findByText(/Vous êtes/)).toBeTruthy();
   });
 });

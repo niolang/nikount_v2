@@ -4,6 +4,7 @@ import { setDeclaredIdentity } from '../../lib/identity';
 import {
   ADMIN_TOKEN,
   adminMe,
+  makeTransaction,
   mockApi,
   nikountView,
   participantList,
@@ -11,6 +12,7 @@ import {
   PARTICIPANT_TOKEN,
   people,
   renderAt,
+  zeroBalances,
 } from '../../test/utils';
 
 afterEach(() => {
@@ -23,23 +25,21 @@ const plain = (value: string | null) => (value ?? '').replace(/[\u00a0\u202f]/g,
 const shareOf = (id: string) => plain(screen.getByTestId(`share-${id}`).textContent);
 
 function transactionFrom(body: Record<string, unknown>, status: string) {
-  return {
-    id: '0193f0aa-0000-7000-8000-000000000900',
-    type: 'EXPENSE',
+  return makeTransaction({
     status,
     amount: body['amount'],
     description: body['description'],
     category: body['category'] ?? null,
     occurredOn: body['occurredOn'],
     payerId: body['payerId'],
-    distributionMode: 'EQUAL',
-    shares: [],
-    createdAt: '2026-11-08T10:00:00.000Z',
-    createdBy: { kind: 'PARTICIPANT', admin: null, declaredParticipantId: null },
-    validatedAt: null,
-    validatedBy: null,
-    version: 1,
-  };
+    ...(status === 'PENDING'
+      ? {
+          createdBy: { kind: 'PARTICIPANT', admin: null, declaredParticipantId: null },
+          validatedAt: null,
+          validatedBy: null,
+        }
+      : {}),
+  });
 }
 
 function mockNikount(me: object, created: { status: string } = { status: 'PENDING' }) {
@@ -50,6 +50,7 @@ function mockNikount(me: object, created: { status: string } = { status: 'PENDIN
       status: 200,
       body: { participantToken: PARTICIPANT_TOKEN },
     }),
+    '/api/v1/balances': () => ({ status: 200, body: zeroBalances }),
     '/api/v1/transactions': (init) =>
       init?.method === 'POST'
         ? {

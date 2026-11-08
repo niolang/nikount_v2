@@ -1,13 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router';
 import { tokenRole, type AccessRole, type MeResponse } from '@nikount/contracts';
 import { ApiError } from '../../api/client';
 import { useMe } from '../../api/nikount';
 import { PageShell } from '../../components/ui';
+import { nikountPath } from '../../lib/links';
 import { forgetNikount, rememberNikount } from '../../lib/recent-nikounts';
-import { NikountHome } from './NikountHome';
-import { ManageParticipantsPage } from './ManageParticipantsPage';
 import { ExpenseFormPage } from '../transactions/ExpenseFormPage';
+import { HistoryPage } from '../transactions/HistoryPage';
+import { TransactionDetailPage } from '../transactions/TransactionDetailPage';
+import { ManageParticipantsPage } from './ManageParticipantsPage';
+import { MenuPage } from './MenuPage';
+import { NikountHome } from './NikountHome';
+import { NikountLayout } from './NikountLayout';
 
 /**
  * Point d'entrée d'un nikount, pour `/n/:token/*` (participant) et `/a/:token/*` (admin).
@@ -55,9 +60,17 @@ function NikountLoader({ token }: { token: string }) {
 }
 
 function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
+  // Chemins absolus : les liens fonctionnent depuis n'importe quel écran du nikount.
+  const basePath = nikountPath(me.role, token);
+  const props = { token, me, basePath };
+  const withNav = (page: ReactNode) => <NikountLayout basePath={basePath}>{page}</NikountLayout>;
+
   return (
     <Routes>
-      <Route index element={<NikountHome token={token} me={me} />} />
+      <Route index element={withNav(<NikountHome {...props} />)} />
+      <Route path="history" element={withNav(<HistoryPage {...props} />)} />
+      <Route path="menu" element={withNav(<MenuPage {...props} />)} />
+      <Route path="tx/:transactionId" element={withNav(<TransactionDetailPage {...props} />)} />
       <Route path="expenses/new" element={<ExpenseFormPage token={token} me={me} />} />
       <Route
         path="participants"
@@ -65,11 +78,11 @@ function NikountRoutes({ token, me }: { token: string; me: MeResponse }) {
           me.role === 'ADMIN' ? (
             <ManageParticipantsPage token={token} me={me} />
           ) : (
-            <Navigate to=".." replace />
+            <Navigate to={basePath} replace />
           )
         }
       />
-      <Route path="*" element={<Navigate to="." replace />} />
+      <Route path="*" element={<Navigate to={basePath} replace />} />
     </Routes>
   );
 }

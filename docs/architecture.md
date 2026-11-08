@@ -134,18 +134,19 @@ soit tout est enregistré, soit rien.
 
 ### Routes
 
-| Route                                                      | Écran                                                                                |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `/`                                                        | Accueil : « Créer un nikount » + liste « Mes nikounts » (localStorage)               |
-| `/new`                                                     | Création (nom, devise, mon nom d'admin, participants initiaux) → écran « Vos liens » |
-| `/n/:token`                                                | Accueil participant (solde, à recevoir/à payer, actions, historique récent)          |
-| `/n/:token/expenses`, `/n/:token/reimbursements`           | Onglets                                                                              |
-| `/n/:token/tx/:id`                                         | Détail d'une opération                                                               |
-| `/n/:token/menu`                                           | Participants, partager le lien, « changer d'identité », état                         |
-| `/a/:token/...`                                            | Mêmes écrans + fonctions admin ; en ≥ `lg`, layout desktop avec barre latérale       |
-| `/a/:token/review`                                         | Opérations à valider                                                                 |
-| `/a/:token/operations`                                     | Table dense (desktop)                                                                |
-| `/a/:token/participants`, `/admins`, `/settings`, `/audit` | Gestion                                                                              |
+| Route                                                      | Écran                                                                                                                                                    |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                                                        | Accueil : « Créer un nikount » + liste « Mes nikounts » (localStorage)                                                                                   |
+| `/new`                                                     | Création (nom, devise, mon nom d'admin, participants initiaux) → écran « Vos liens »                                                                     |
+| `/n/:token`                                                | Accueil participant (solde, à recevoir/à payer, actions, historique récent)                                                                              |
+| `/n/:token/history?filter=…`                               | Historique groupé par jour ; onglets « Dépenses » (`EXPENSE`) et « Remboursements » (`REIMBURSEMENT`), filtres « En attente » et « Annulées / refusées » |
+| `/n/:token/expenses/new`                                   | Saisie d’une dépense                                                                                                                                     |
+| `/n/:token/tx/:id`                                         | Détail d'une opération                                                                                                                                   |
+| `/n/:token/menu`                                           | Participants, partager le lien, « changer d'identité », état                                                                                             |
+| `/a/:token/...`                                            | Mêmes écrans + fonctions admin ; en ≥ `lg`, layout desktop avec barre latérale                                                                           |
+| `/a/:token/review`                                         | Opérations à valider                                                                                                                                     |
+| `/a/:token/operations`                                     | Table dense (desktop)                                                                                                                                    |
+| `/a/:token/participants`, `/admins`, `/settings`, `/audit` | Gestion                                                                                                                                                  |
 
 Un seul SPA : **l'interface desktop admin est un layout, pas une deuxième application**. Les composants
 métier (formulaire d'opération, détail, soldes) sont partagés.

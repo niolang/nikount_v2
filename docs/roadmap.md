@@ -10,7 +10,7 @@
 | **3** Participants ✅              | CRUD admin, désactivation, choix d'identité déclarée côté participant                                                                                                                                                                                            | Tests : nom unique, isolation inter-nikount                                                                              |
 | **4** Opérations + répartitions ✅ | `core/split.ts` **écrit en premier, test-first** ; tables `transaction`, `transaction_share`, `transaction_revision`, triggers ; `POST/GET /transactions` ; formulaire mobile avec prévisualisation                                                              | Tests de propriétés : Σ parts = montant pour tous modes ; trigger refuse une incohérence ; idempotence `clientRequestId` |
 | **5** Moteur comptable + soldes ✅ | `core/balances.ts` (soldes + suggestions), `GET /balances`, écran soldes « à recevoir / à payer », « qui paie la prochaine »                                                                                                                                     | Σ soldes = 0 (propriété) ; SQL ≡ moteur ; exemples du cahier des charges reproduits                                      |
-| **6** Historique                   | Liste groupée par jour, filtres, page détail (parts → montants), révisions                                                                                                                                                                                       | Opérations annulées/refusées visibles                                                                                    |
+| **6** Historique ✅                | Liste groupée par jour, filtres, page détail (parts → montants), révisions                                                                                                                                                                                       | Opérations annulées/refusées visibles                                                                                    |
 | **7** Validation                   | Statuts, validate/reject/cancel, bulk tout-ou-rien, bannière « N à valider », audit                                                                                                                                                                              | Matrice de transitions testée exhaustivement ; PENDING sans effet sur soldes                                             |
 | **8** Remboursements               | Formulaire dédié, suggestions de virements → pré-remplissage                                                                                                                                                                                                     | Exemple Bob → Alice 30 € du cahier des charges                                                                           |
 | **9** Cycle de vie                 | OPEN/SETTLEMENT/CLOSED, réouverture motivée, badge d'état, rotation du lien participant, gestion des admins                                                                                                                                                      | Matrice état × action testée ; clôture refusée si PENDING                                                                |
@@ -45,6 +45,12 @@
 > « SQL ≡ moteur » sur des jeux aléatoires (tous modes, opérations en attente). Accueil : « Ton solde », à recevoir /
 > à payer, qui paie la prochaine, opérations en attente, virements suggérés (dépliés en phase de règlement). 326 tests ;
 > vérifié dans le navigateur côté admin et participant.
+
+> ✅ Phase 6 : navigation basse Accueil · Dépenses · Remboursements · Menu ; historique groupé par jour (« Aujourd’hui »,
+> « Hier », date), filtres Tout / Dépenses / Remboursements / En attente / Annulées-refusées, opérations annulées et
+> refusées visibles (barrées) ; page détail (payeur, « 2 parts → 40 € », « 30 % → 36 € », mode, validation, refus ou
+> annulation avec motif, traçabilité des versions) ; `GET /transactions/:id/revisions`. Participants et lien
+> d’invitation déplacés dans « Menu ». 356 tests ; vérifié dans le navigateur.
 
 ## Stratégie de tests
 

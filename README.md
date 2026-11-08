@@ -3,7 +3,7 @@
 Gestion des dépenses partagées entre amis, groupes et associations — 100 % navigateur, sans compte.
 **Un événement = un nikount = un lien privé.**
 
-> Phases 0 (conception), 1 (socle), 2 (création et accès par lien), 3 (participants), 4 (opérations et répartitions) et 5 (soldes) en place — voir [docs/roadmap.md](docs/roadmap.md).
+> Phases 0 (conception), 1 (socle), 2 (création et accès par lien), 3 (participants), 4 (opérations et répartitions), 5 (soldes) et 6 (historique) en place — voir [docs/roadmap.md](docs/roadmap.md).
 
 ## Démarrer
 
